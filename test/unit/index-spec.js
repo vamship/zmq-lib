@@ -1,5 +1,6 @@
 /* jshint node:true, expr:true */
 'use strict';
+
 var expect = require('chai').expect;
 var _index = require('../../lib/index');
 

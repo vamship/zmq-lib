@@ -1,5 +1,6 @@
-'use strict';
 /* jshint node:true, expr:true */
+'use strict';
+
 var _events = require('events');
 var _zmq = require('zmq');
 var _sinon = require('sinon');

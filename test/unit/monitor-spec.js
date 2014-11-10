@@ -1,5 +1,6 @@
 /* jshint node:true, expr:true */
 'use strict';
+
 var _chai = require('chai');
 var expect = _chai.expect;
 
