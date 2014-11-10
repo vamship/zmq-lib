@@ -1,0 +1,49 @@
+{
+  "name": "zmq-lib",
+  "version": "0.0.0",
+  "description": "A library of wrappers around the core zmq socket offering, providing some additional intelligence and functionality.",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "grunt"
+  },
+  "keywords": [
+    "nodejs",
+    "template"
+  ],
+  "author": "Vamshi K Ponnapalli <vamshi.ponnapalli@gmail.com>",
+  "license": "ISC",
+  "dependencies": {
+    "uuid": "^2.0.1",
+    "winston": "^0.8.3",
+    "zmq": "^2.8.0"
+  },
+  "devDependencies": {
+    "chai": "^1.9.2",
+    "chai-as-promised": "^4.1.1",
+    "grunt": "^0.4.5",
+    "grunt-cli": "^0.1.13",
+    "grunt-contrib-clean": "^0.6.0",
+    "grunt-contrib-jshint": "^0.10.0",
+    "grunt-contrib-watch": "^0.6.1",
+    "grunt-jsbeautifier": "^0.2.7",
+    "grunt-mocha-test": "^0.12.2",
+    "jshint-stylish": "^1.0.0",
+    "load-grunt-tasks": "^1.0.0",
+    "mocha": "^2.0.1",
+    "sinon": "^1.11.1",
+    "sinon-chai": "^2.6.0",
+    "time-grunt": "^1.0.0",
+    "wysknd-lib": "git+http://github.com/vamship/wysknd-lib.git"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vamship/zmq-lib.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vamship/zmq-lib/issues"
+  },
+  "homepage": "https://github.com/vamship/zmq-lib"
+}
