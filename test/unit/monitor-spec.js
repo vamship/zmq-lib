@@ -4,6 +4,7 @@
 var _chai = require('chai');
 var expect = _chai.expect;
 
+var _testUtils = require('../test-util');
 var Monitor = require('../../lib/monitor');
 
 describe('Monitor', function() {
@@ -104,8 +105,9 @@ describe('Monitor', function() {
                 var endTime = Date.now();
                 var min = DEFAULT_FREQUENCY;
                 var max = DEFAULT_FREQUENCY + 3;
-                expect(endTime - startTime).to.be.within(min, max);
-                done();
+                _testUtils.evaluateExpectations(function(){
+                    expect(endTime - startTime).to.be.within(min, max);
+                }, done);
             });
         });
 
@@ -117,7 +119,10 @@ describe('Monitor', function() {
             var count = 0;
             function evaluateExpiryCount() {
                 count++;
-                expect(monitor.getExpiryCount()).to.equal(count);
+                _testUtils.evaluateExpectations(function(){
+                    expect(monitor.getExpiryCount()).to.equal(count);
+                }, done, true);
+
                 if(count < DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateExpiryCount);
                 } else {
@@ -133,7 +138,10 @@ describe('Monitor', function() {
             var count = 0;
             function evaluateLimitExceeded(limitExceeded) {
                 count++;
-                expect(limitExceeded).to.be.false;
+                _testUtils.evaluateExpectations(function(){
+                    expect(limitExceeded).to.be.false;
+                }, done, true);
+
                 if(count < DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateLimitExceeded);
                 } else {
@@ -152,7 +160,9 @@ describe('Monitor', function() {
                 if(count <= DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateLimitExceeded);
                 } else if(count > DEFAULT_MAX_HIT_COUNT) {
-                    expect(limitExceeded).to.be.true;
+                    _testUtils.evaluateExpectations(function(){
+                        expect(limitExceeded).to.be.true;
+                    }, done, true);
                     done();
                 }
             }
@@ -165,10 +175,11 @@ describe('Monitor', function() {
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             monitor.start(function() {
-                expect(monitor.getExpiryCount()).to.equal(1);
-                monitor.clear();
-                expect(monitor.getExpiryCount()).to.equal(0);
-                done();
+                _testUtils.evaluateExpectations(function(){
+                    expect(monitor.getExpiryCount()).to.equal(1);
+                    monitor.clear();
+                    expect(monitor.getExpiryCount()).to.equal(0);
+                }, done);
             });
         });
 

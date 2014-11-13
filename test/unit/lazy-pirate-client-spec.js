@@ -9,6 +9,7 @@ var _chai = require('chai');
 _chai.use(_sinonChai);
 
 var expect = _chai.expect;
+var _testUtils = require('../test-util');
 var Monitor = require('../../lib/monitor');
 var LazyPirateClient = require('../../lib/lazy-pirate-client');
 
@@ -60,32 +61,36 @@ describe('LazyPirateClient', function() {
             var error = 'Invalid endpoint specified (arg #1)';
 
             function createClient(endpoint) {
-                return new LazyPirateClient(endpoint);
+                return function() {
+                    return new LazyPirateClient(endpoint);
+                };
             }
 
-            expect(function() { createClient() }).to.throw(error);
-            expect(function() { createClient(null) }).to.throw(error);
-            expect(function() { createClient('') }).to.throw(error);
-            expect(function() { createClient(1) }).to.throw(error);
-            expect(function() { createClient(true) }).to.throw(error);
-            expect(function() { createClient([]) }).to.throw(error);
-            expect(function() { createClient({}) }).to.throw(error);
+            expect(createClient()).to.throw(error);
+            expect(createClient(null)).to.throw(error);
+            expect(createClient('')).to.throw(error);
+            expect(createClient(1)).to.throw(error);
+            expect(createClient(true)).to.throw(error);
+            expect(createClient([])).to.throw(error);
+            expect(createClient({})).to.throw(error);
         });
 
         it('should throw an error if a valid retry monitor object is not specified', function() {
             var error = 'Invalid retry monitor specified (arg #2)';
 
             function createClient(monitor) {
-                return new LazyPirateClient(DEFAULT_ENDPOINT, monitor);
+                return function() {
+                    return new LazyPirateClient(DEFAULT_ENDPOINT, monitor);
+                };
             }
 
-            expect(function() { createClient() }).to.throw(error);
-            expect(function() { createClient(null) }).to.throw(error);
-            expect(function() { createClient('') }).to.throw(error);
-            expect(function() { createClient(1) }).to.throw(error);
-            expect(function() { createClient(true) }).to.throw(error);
-            expect(function() { createClient([]) }).to.throw(error);
-            expect(function() { createClient({}) }).to.throw(error);
+            expect(createClient()).to.throw(error);
+            expect(createClient(null)).to.throw(error);
+            expect(createClient('')).to.throw(error);
+            expect(createClient(1)).to.throw(error);
+            expect(createClient(true)).to.throw(error);
+            expect(createClient([])).to.throw(error);
+            expect(createClient({})).to.throw(error);
         });
 
         it('should create an object that exposes members required by the interface', function() {
@@ -150,8 +155,9 @@ describe('LazyPirateClient', function() {
             _client = _createLpClient();
             
             _repSock.on('message', function(message) {
-                expect(message.toString()).to.equal(clientMessage);
-                done();
+                _testUtils.evaluateExpectations(function(){
+                    expect(message.toString()).to.equal(clientMessage);
+                }, done);
             });
 
             _client.on('ready', function() {
@@ -170,11 +176,11 @@ describe('LazyPirateClient', function() {
 
             _client.on('ready', function() {
                 _client.send(clientMessage);
-                expect(function() {
-                    _client.send(clientMessage);
-                }).to.throw(error);
-
-                done();
+                _testUtils.evaluateExpectations(function() {
+                    expect(function() {
+                        _client.send(clientMessage);
+                    }).to.throw(error);
+                }, done);
             });
 
             _client.initialize();
@@ -212,11 +218,11 @@ describe('LazyPirateClient', function() {
             _client = _createLpClient();
 
             _client.on('ready', function() {
-                expect(_client.isReady()).to.be.true;
-                _client.send(clientMessage);
-                expect(_client.isReady()).to.be.false;
-
-                done();
+                _testUtils.evaluateExpectations(function() {
+                    expect(_client.isReady()).to.be.true;
+                    _client.send(clientMessage);
+                    expect(_client.isReady()).to.be.false;
+                }, done);
             });
 
             _client.initialize();
@@ -237,8 +243,9 @@ describe('LazyPirateClient', function() {
                 eventCount++;
 
                 if(eventCount > 1) {
-                    expect(_client.isReady()).to.be.true;
-                    done();
+                    _testUtils.evaluateExpectations(function() {
+                        expect(_client.isReady()).to.be.true;
+                    }, done);
                 } else {
                     _client.send(clientMessage);
                 }
@@ -300,8 +307,9 @@ describe('LazyPirateClient', function() {
                 });
 
                 _client.on('abandoned', function() {
-                    expect(messageCounter).to.be.at.least(retryCount);
-                    done();
+                    _testUtils.evaluateExpectations(function() {
+                        expect(messageCounter).to.be.at.least(retryCount);
+                    }, done);
                 });
 
                 _client.initialize();
@@ -310,41 +318,28 @@ describe('LazyPirateClient', function() {
     });
     
     describe('dispose()', function() {
-        it('should close an open socket when invoked.', function(done) {
+        it('should close an open socket, and set isReady()=false when invoked.', function(done) {
             var connectionMade = false;
+            var wasReady = false;
             _repSock = _createRepSocket();
             _client = _createLpClient();
 
             _repSock.on('disconnect', function(message) {
+                _testUtils.evaluateExpectations(function() {
 
-                //Expect that the connection was live prior to the disconnect.
-                expect(connectionMade).to.be.true;
-                done();
+                    //Expect that the connection was live prior to the disconnect.
+                    expect(connectionMade).to.be.true;
+
+                    //Expect that the client was ready before disconnect, and that
+                    //it is no longer ready after disconnect.
+                    expect(wasReady).to.be.true;
+                    expect(_client.isReady()).to.be.false;
+                }, done);
             });
 
             _client.on('ready', function() {
                 connectionMade = true;
-                _client.dispose();
-            });
-            _client.initialize();
-        });
-
-        it('should set isReady()=false when invoked.', function(done) {
-            var isReady = false;
-            _repSock = _createRepSocket();
-            _client = _createLpClient();
-
-            _repSock.on('disconnect', function(message) {
-
-                //Expect that the client was ready before disconnect, and that
-                //it is no longer ready after disconnect.
-                expect(isReady).to.be.true;
-                expect(_client.isReady()).to.be.false;
-                done();
-            });
-
-            _client.on('ready', function() {
-                isReady = true;
+                wasReady = _client.isReady();
                 _client.dispose();
             });
             _client.initialize();
