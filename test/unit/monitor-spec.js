@@ -1,7 +1,10 @@
 /* jshint node:true, expr:true */
 'use strict';
 
+var _q = require('q');
 var _chai = require('chai');
+_chai.use(require('chai-as-promised'));
+
 var expect = _chai.expect;
 
 var _testUtils = require('../test-util');
@@ -98,6 +101,7 @@ describe('Monitor', function() {
         });
 
         it('should invoke the callback parameter once the frequency duration expires', function(done) {
+            var def = _q.defer();
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             var startTime = Date.now();
@@ -105,13 +109,16 @@ describe('Monitor', function() {
                 var endTime = Date.now();
                 var min = DEFAULT_FREQUENCY;
                 var max = DEFAULT_FREQUENCY + 3;
-                _testUtils.evaluateExpectations(function(){
+                _testUtils.runDeferred(function(){
                     expect(endTime - startTime).to.be.within(min, max);
-                }, done);
+                }, def);
             });
+
+            expect(def.promise).to.be.fulfilled.notify(done);
         });
 
         it('should increment the expiry count once the frequency duration expires', function(done) {
+            var def = _q.defer();
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             expect(monitor.getExpiryCount()).to.equal(0);
@@ -119,39 +126,48 @@ describe('Monitor', function() {
             var count = 0;
             function evaluateExpiryCount() {
                 count++;
-                _testUtils.evaluateExpectations(function(){
+                _testUtils.runDeferred(function(){
                     expect(monitor.getExpiryCount()).to.equal(count);
-                }, done, true);
+                }, def);
 
                 if(count < DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateExpiryCount);
                 } else {
-                    done();
+                    // Reject/resolve based on whether the tests passed or failed.
+                    expect(def.promise).to.be.fulfilled.then(function() { done(); },
+                                                             function(err) { done(err); });
                 }
             }
+
             monitor.start(evaluateExpiryCount);
+
         });
 
         it('should invoke the callback with the expiryLimitExceeded=false if the expiryCount <= maxExpiryCount', function(done) {
+            var def = _q.defer();
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             var count = 0;
             function evaluateLimitExceeded(limitExceeded) {
                 count++;
-                _testUtils.evaluateExpectations(function(){
+                _testUtils.runDeferred(function(){
                     expect(limitExceeded).to.be.false;
-                }, done, true);
+                }, def);
 
                 if(count < DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateLimitExceeded);
                 } else {
-                    done();
+                    // Reject/resolve based on whether the tests passed or failed.
+                    expect(def.promise).to.be.fulfilled.then(function() { done(); },
+                                                             function(err) { done(err); });
                 }
             }
+
             monitor.start(evaluateLimitExceeded);
         });
 
         it('should invoke the callback with the expiryLimitExceeded=true if the expiryCount > maxExpiryCount', function(done) {
+            var def = _q.defer();
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             var count = 0;
@@ -160,27 +176,31 @@ describe('Monitor', function() {
                 if(count <= DEFAULT_MAX_HIT_COUNT) {
                     monitor.start(evaluateLimitExceeded);
                 } else if(count > DEFAULT_MAX_HIT_COUNT) {
-                    _testUtils.evaluateExpectations(function(){
+                    _testUtils.runDeferred(function() {
                         expect(limitExceeded).to.be.true;
-                    }, done, true);
-                    done();
+                    }, def);
                 }
             }
             monitor.start(evaluateLimitExceeded);
+
+            expect(def.promise).to.be.fulfilled.notify(done);
         });
     });
 
     describe('clear()', function(done) {
         it('should reset the expiry count to 0 when invoked', function(done) {
+            var def = _q.defer();
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             monitor.start(function() {
-                _testUtils.evaluateExpectations(function(){
+                _testUtils.runDeferred(function(){
                     expect(monitor.getExpiryCount()).to.equal(1);
                     monitor.clear();
                     expect(monitor.getExpiryCount()).to.equal(0);
-                }, done);
+                }, def);
             });
+
+            expect(def.promise).to.be.fulfilled.notify(done);
         });
 
         it('should set the in progress flag to false when invoked.', function() {
