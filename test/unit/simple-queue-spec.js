@@ -12,13 +12,13 @@ _chai.use(require('chai-as-promised'));
 
 var expect = _chai.expect;
 var _testUtils = require('../test-util');
-var SimpleBroker = require('../../lib/simple-broker');
+var SimpleQueue = require('../../lib/simple-queue');
 
-describe('SimpleBroker', function() {
+describe('SimpleQueue', function() {
     var DEFAULT_DELAY = 10;
     var READY_MESSAGE = 'READY';
 
-    var _broker;
+    var _queue;
     var _sockets;
 
     beforeEach(function(){
@@ -26,18 +26,18 @@ describe('SimpleBroker', function() {
     })
 
     afterEach(function(){
-        if(_broker) {
-            _broker.dispose();
+        if(_queue) {
+            _queue.dispose();
         }
         _sockets.forEach(function(sock){
             sock.close();
         });
     });
 
-    function _createBroker(feEndpoint, beEndpoint) {
+    function _createQueue(feEndpoint, beEndpoint) {
         feEndpoint = feEndpoint || _testUtils.generateEndpoint();
         beEndpoint = beEndpoint || _testUtils.generateEndpoint();
-        return new SimpleBroker(feEndpoint, beEndpoint);
+        return new SimpleQueue(feEndpoint, beEndpoint);
     }
 
     function _createReqSocket() {
@@ -64,118 +64,118 @@ describe('SimpleBroker', function() {
         it('should throw an error if invoked with an invalid front end endpoint', function() {
             var error = 'Invalid front end endpoint specified (arg #1)';
 
-            function createBroker(feEndpoint) {
+            function createQueue(feEndpoint) {
                 return function() {
-                    return new SimpleBroker(feEndpoint);
+                    return new SimpleQueue(feEndpoint);
                 };
             }
 
-            expect(createBroker()).to.throw(error);
-            expect(createBroker(null)).to.throw(error);
-            expect(createBroker('')).to.throw(error);
-            expect(createBroker(1)).to.throw(error);
-            expect(createBroker(true)).to.throw(error);
-            expect(createBroker([])).to.throw(error);
-            expect(createBroker({})).to.throw(error);
+            expect(createQueue()).to.throw(error);
+            expect(createQueue(null)).to.throw(error);
+            expect(createQueue('')).to.throw(error);
+            expect(createQueue(1)).to.throw(error);
+            expect(createQueue(true)).to.throw(error);
+            expect(createQueue([])).to.throw(error);
+            expect(createQueue({})).to.throw(error);
         });
 
         it('should throw an error if invoked with an invalid back end endpoint', function() {
             var feEndpoint = _testUtils.generateEndpoint();
             var error = 'Invalid back end endpoint specified (arg #2)';
 
-            function createBroker(beEndpoint) {
+            function createQueue(beEndpoint) {
                 return function() {
-                    return new SimpleBroker(feEndpoint, beEndpoint);
+                    return new SimpleQueue(feEndpoint, beEndpoint);
                 };
             }
 
-            expect(createBroker()).to.throw(error);
-            expect(createBroker(null)).to.throw(error);
-            expect(createBroker('')).to.throw(error);
-            expect(createBroker(1)).to.throw(error);
-            expect(createBroker(true)).to.throw(error);
-            expect(createBroker([])).to.throw(error);
-            expect(createBroker({})).to.throw(error);
+            expect(createQueue()).to.throw(error);
+            expect(createQueue(null)).to.throw(error);
+            expect(createQueue('')).to.throw(error);
+            expect(createQueue(1)).to.throw(error);
+            expect(createQueue(true)).to.throw(error);
+            expect(createQueue([])).to.throw(error);
+            expect(createQueue({})).to.throw(error);
         });
 
         it('should create an object that exposes members required by the interface', function() {
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker).to.have.property('initialize').and.to.be.a('function');
-            expect(_broker).to.have.property('dispose').and.to.be.a('function');
-            expect(_broker).to.have.property('getPendingRequestCount').and.to.be.a('function');
-            expect(_broker).to.have.property('getAvailableWorkerCount').and.to.be.a('function');
-            expect(_broker).to.have.property('isReady').and.to.be.a('function');
+            expect(_queue).to.have.property('initialize').and.to.be.a('function');
+            expect(_queue).to.have.property('dispose').and.to.be.a('function');
+            expect(_queue).to.have.property('getPendingRequestCount').and.to.be.a('function');
+            expect(_queue).to.have.property('getAvailableWorkerCount').and.to.be.a('function');
+            expect(_queue).to.have.property('isReady').and.to.be.a('function');
         });
 
         it('should initialize properties to default values', function() {
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.getPendingRequestCount()).to.equal(0);
-            expect(_broker.getAvailableWorkerCount()).to.equal(0);
-            expect(_broker.isReady()).to.be.false;
+            expect(_queue.getPendingRequestCount()).to.equal(0);
+            expect(_queue.getAvailableWorkerCount()).to.equal(0);
+            expect(_queue.isReady()).to.be.false;
         });
     });
 
     describe('initialize', function() {
         
         it('should return a promise when invoked', function(){
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            var ret = _broker.initialize();
+            var ret = _queue.initialize();
             expect(ret).to.be.an('object');
             expect(ret).to.have.property('then').and.to.be.a('function');
         });
 
         it('should reject the promise if the front end binding fails', function(done) {
-            _broker = _createBroker('bad-endpoint');
+            _queue = _createQueue('bad-endpoint');
             
-            expect(_broker.initialize()).to.be.rejected.notify(done);
+            expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should reject the promise if the back end binding fails', function(done){
-            _broker = _createBroker(null, 'bad-endpoint');
+            _queue = _createQueue(null, 'bad-endpoint');
 
-            expect(_broker.initialize()).to.be.rejected.notify(done);
+            expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should reject the promise if both front and back end binrings fail', function(done){
-            _broker = _createBroker('bad-endpoint', 'bad-endpoint');
+            _queue = _createQueue('bad-endpoint', 'bad-endpoint');
 
-            expect(_broker.initialize()).to.be.rejected.notify(done);
+            expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should resolve the promise once both front and back ends have been bound successfully', function(done){
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.initialize()).to.be.fulfilled.notify(done);
+            expect(_queue.initialize()).to.be.fulfilled.notify(done);
         });
 
         it('should set isReady()=true when initialization succeeds', function(done) {
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.isReady()).to.be.false;
+            expect(_queue.isReady()).to.be.false;
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function() {
-                expect(_broker.isReady()).to.be.true;
+            expect(_queue.initialize()).to.be.fulfilled.then(function() {
+                expect(_queue.isReady()).to.be.true;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should set isReady()=false when initialization fails', function(done) {
-            _broker = _createBroker('bad-endpoint', 'bad-endpoint');
+            _queue = _createQueue('bad-endpoint', 'bad-endpoint');
 
-            expect(_broker.isReady()).to.be.false;
+            expect(_queue.isReady()).to.be.false;
 
-            expect(_broker.initialize()).to.be.rejected.then(function() {
-                expect(_broker.isReady()).to.be.false;
+            expect(_queue.initialize()).to.be.rejected.then(function() {
+                expect(_queue.isReady()).to.be.false;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should open a front end socket and bind to the endpoint when invoked', function(done) {
             var feEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(feEndpoint);
+            _queue = _createQueue(feEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var deferred = _q.defer();
                 var client1 = _createReqSocket();
 
@@ -190,9 +190,9 @@ describe('SimpleBroker', function() {
 
         it('should open a back end socket and bind to the endpoint when invoked', function(done) {
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(beEndpoint);
+            _queue = _createQueue(beEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var deferred = _q.defer();
                 var client1 = _createReqSocket();
 
@@ -208,10 +208,10 @@ describe('SimpleBroker', function() {
 
     describe('dispose', function() {
         it('should return a promise when invoked', function(done) {
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
-                var ret = _broker.dispose();
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
+                var ret = _queue.dispose();
 
                 expect(ret).to.be.an('object');
                 expect(ret).to.have.property('then').and.to.be.a('function');
@@ -219,20 +219,20 @@ describe('SimpleBroker', function() {
         });
 
         it('should resolve the promise once the sockets have been successfully closed', function(done){
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
-                return expect(_broker.dispose()).to.be.fulfilled;
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
+                return expect(_queue.dispose()).to.be.fulfilled;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should set isReady()=false when dispose succeeds', function(done) {
-            _broker = _createBroker();
+            _queue = _createQueue();
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
-                expect(_broker.isReady()).to.be.true;
-                return expect(_broker.dispose()).to.be.fulfilled.then(function() {
-                    expect(_broker.isReady()).to.be.false;
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
+                expect(_queue.isReady()).to.be.true;
+                return expect(_queue.dispose()).to.be.fulfilled.then(function() {
+                    expect(_queue.isReady()).to.be.false;
                 });
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
@@ -268,14 +268,14 @@ describe('SimpleBroker', function() {
         
         it('should increment the pending request count if a request is received, when no workers are available', function(done){
             var feEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(feEndpoint);
+            _queue = _createQueue(feEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var count = 3;
                 var promise = _connectAndSend(count, feEndpoint, 'MESSAGE');
 
                 var doTests = _testUtils.getDelayedRunner(function() {
-                    expect(_broker.getPendingRequestCount()).to.equal(count);
+                    expect(_queue.getPendingRequestCount()).to.equal(count);
                 }, DEFAULT_DELAY);
 
                 return expect(promise).to.be.fulfilled.then(doTests);
@@ -284,14 +284,14 @@ describe('SimpleBroker', function() {
 
         it('should increment the available workers count if a worker sends a message, when no requests are available', function(done){
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(null, beEndpoint);
+            _queue = _createQueue(null, beEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var count = 3;
                 var promise = _connectAndSend(count, beEndpoint, 'READY');
 
                 var doTests = _testUtils.getDelayedRunner(function() {
-                    expect(_broker.getAvailableWorkerCount()).to.equal(count);
+                    expect(_queue.getAvailableWorkerCount()).to.equal(count);
                 }, DEFAULT_DELAY);
 
                 return expect(promise).to.be.fulfilled.then(doTests);
@@ -301,9 +301,9 @@ describe('SimpleBroker', function() {
         it('should immediately dispatch a new request to a worker if one is available', function(done){
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(feEndpoint, beEndpoint);
+            _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function() {
+            expect(_queue.initialize()).to.be.fulfilled.then(function() {
                 var workerCount = 3;
                 var workerPromise = _connectAndSend(workerCount, beEndpoint, 'READY');
 
@@ -312,8 +312,8 @@ describe('SimpleBroker', function() {
                     var clientPromise = _connectAndSend(clientCount, feEndpoint, 'MESSAGE');
                     
                     var doTests = _testUtils.getDelayedRunner(function() {
-                        expect(_broker.getAvailableWorkerCount()).to.equal(0);
-                        expect(_broker.getPendingRequestCount()).to.equal(0);
+                        expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                        expect(_queue.getPendingRequestCount()).to.equal(0);
                     }, DEFAULT_DELAY);
 
                     return expect(clientPromise).to.be.fulfilled.then(doTests);
@@ -326,9 +326,9 @@ describe('SimpleBroker', function() {
         it('should immediately provide a newly ready worker with a request if one is available', function(done){
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(feEndpoint, beEndpoint);
+            _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function() {
+            expect(_queue.initialize()).to.be.fulfilled.then(function() {
                 var clientCount = 3;
                 var clientPromise = _connectAndSend(clientCount, feEndpoint, 'MESSAGE');
 
@@ -337,8 +337,8 @@ describe('SimpleBroker', function() {
                     var workerPromise = _connectAndSend(workerCount, beEndpoint, 'READY');
                     
                     var doTests = _testUtils.getDelayedRunner(function() {
-                        expect(_broker.getAvailableWorkerCount()).to.equal(0);
-                        expect(_broker.getPendingRequestCount()).to.equal(0);
+                        expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                        expect(_queue.getPendingRequestCount()).to.equal(0);
                     }, DEFAULT_DELAY);
 
                     return expect(workerPromise).to.be.fulfilled.then(doTests);
@@ -351,9 +351,9 @@ describe('SimpleBroker', function() {
         it('should send the request to the worker in the correct format', function(done){
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = _createBroker(feEndpoint, beEndpoint);
+            _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var client = _createReqSocket();
                 var worker = _createReqSocket();
                 var clientMessage = 'MESSAGE';
@@ -380,7 +380,7 @@ describe('SimpleBroker', function() {
         it('should send replies from the worker back to the correct client', function(done) {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            _broker = new SimpleBroker(feEndpoint, beEndpoint);
+            _queue = new SimpleQueue(feEndpoint, beEndpoint);
 
             function createEchoWorker() {
                 var worker = _createReqSocket();
@@ -408,7 +408,7 @@ describe('SimpleBroker', function() {
                 });
             }
 
-            expect(_broker.initialize()).to.be.fulfilled.then(function(){
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var client1 = _createReqSocket();
                 var client2 = _createReqSocket();
 
