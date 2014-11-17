@@ -17,10 +17,10 @@ var LazyPirateClient = require('../../lib/lazy-pirate-client');
 describe('LazyPirateClient', function() {
     var DEFAULT_RETRY_FREQ = 2500;
     var DEFAULT_RETRY_COUNT = 3;
-    var _repSock;
+    var _queue;
     var _client;
 
-    function _createRepSocket(endpoint) {
+    function _createQueue(endpoint) {
         var socket = _zmq.createSocket('rep');
         socket.monitor(10);
         socket.bind(endpoint);
@@ -28,31 +28,23 @@ describe('LazyPirateClient', function() {
         return socket;
     }
 
-    function _destroyReqSocket(reqSock) {
-        if(reqSock){
-            reqSock.dispose();
-        }
-    }
-
     function _createLpClient(endpoint, monitor) {
         monitor = monitor || new Monitor(DEFAULT_RETRY_FREQ, DEFAULT_RETRY_COUNT);
-        var socket = new LazyPirateClient(endpoint, monitor);
+        var client = new LazyPirateClient(endpoint, monitor);
 
-        return socket;
-    }
-
-    function _destroyLpClient(client) {
-        if(client){
-            client.close();
-        }
+        return client;
     }
 
     afterEach(function() {
         // Clean up resources. This will happen even if tests fail.
-        _destroyReqSocket(_client);
-        _destroyLpClient(_repSock);
+        if(_client){
+            _client.dispose();
+        }
+        if(_queue){
+            _queue.close();
+        }
         _client = null;
-        _repSock = null;
+        _queue = null;
     });
 
     describe('ctor()', function() {
@@ -118,9 +110,9 @@ describe('LazyPirateClient', function() {
             var endpoint = _testUtils.generateEndpoint();
 
             _client = _createLpClient(endpoint);
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
 
-            _repSock.on('accept', function() {
+            _queue.on('accept', function() {
                 // If this event is not triggered, the test will timeout and fail.
                 def.resolve();
             });
@@ -158,10 +150,10 @@ describe('LazyPirateClient', function() {
             var endpoint = _testUtils.generateEndpoint();
             var clientMessage = 'hello';
 
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
 
-            _repSock.on('message', function(message) {
+            _queue.on('message', function(message) {
                 _testUtils.runDeferred(function(){
                     expect(message.toString()).to.equal(clientMessage);
                 }, def);
@@ -182,7 +174,7 @@ describe('LazyPirateClient', function() {
             var clientMessage = 'hello';
             var endpoint = _testUtils.generateEndpoint();
             
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
 
             _client.on('ready', function() {
@@ -204,11 +196,11 @@ describe('LazyPirateClient', function() {
             var endpoint = _testUtils.generateEndpoint();
             var clientMessage = 'hello';
 
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
             
-            _repSock.on('message', function(message) {
-                _repSock.send('OK');
+            _queue.on('message', function(message) {
+                _queue.send('OK');
             });
 
             var eventCount = 0;
@@ -233,7 +225,7 @@ describe('LazyPirateClient', function() {
             var endpoint = _testUtils.generateEndpoint();
             var clientMessage = 'hello';
             
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
 
             _client.on('ready', function() {
@@ -254,11 +246,11 @@ describe('LazyPirateClient', function() {
             var endpoint = _testUtils.generateEndpoint();
             var clientMessage = 'hello';
             
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
 
-            _repSock.on('message', function(message) {
-                _repSock.send('OK');
+            _queue.on('message', function(message) {
+                _queue.send('OK');
             });
 
             var eventCount = 0;
@@ -290,8 +282,8 @@ describe('LazyPirateClient', function() {
                 var messageCounter = 0;
 
                 function initRepSocket() {
-                    _repSock = _createRepSocket(endpoint);
-                    _repSock.on('message', function(message){
+                    _queue = _createQueue(endpoint);
+                    _queue.on('message', function(message){
                         messageCounter++;
                         if(messageCounter > 1) {
                             // If this condition is not met, the test will timeout and fail.
@@ -323,8 +315,8 @@ describe('LazyPirateClient', function() {
                 var retryCount = 3;
 
                 function initRepSocket() {
-                    _repSock = _createRepSocket(endpoint);
-                    _repSock.on('message', function(message) {
+                    _queue = _createQueue(endpoint);
+                    _queue.on('message', function(message) {
                         messageCounter++;
                         initRepSocket();
                     });
@@ -357,10 +349,10 @@ describe('LazyPirateClient', function() {
             var connectionMade = false;
             var wasReady = false;
 
-            _repSock = _createRepSocket(endpoint);
+            _queue = _createQueue(endpoint);
             _client = _createLpClient(endpoint);
 
-            _repSock.on('disconnect', function(message) {
+            _queue.on('disconnect', function(message) {
                 _testUtils.runDeferred(function() {
 
                     //Expect that the connection was live prior to the disconnect.

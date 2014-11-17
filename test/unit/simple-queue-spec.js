@@ -13,10 +13,10 @@ _chai.use(require('chai-as-promised'));
 var expect = _chai.expect;
 var _testUtils = require('../test-util');
 var SimpleQueue = require('../../lib/simple-queue');
+var MessageDefinitions = require('../../lib/message-definitions');
 
 describe('SimpleQueue', function() {
     var DEFAULT_DELAY = 10;
-    var READY_MESSAGE = 'READY';
 
     var _queue;
     var _sockets;
@@ -176,15 +176,15 @@ describe('SimpleQueue', function() {
             _queue = _createQueue(feEndpoint);
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var deferred = _q.defer();
+                var def = _q.defer();
                 var client1 = _createReqSocket();
 
                 client1.on('connect', function(){
-                    deferred.resolve();
+                    def.resolve();
                 });
                 client1.connect(feEndpoint);
 
-                return deferred.promise;
+                return def.promise;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
@@ -193,15 +193,15 @@ describe('SimpleQueue', function() {
             _queue = _createQueue(beEndpoint);
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var deferred = _q.defer();
+                var def = _q.defer();
                 var client1 = _createReqSocket();
 
                 client1.on('connect', function(){
-                    deferred.resolve();
+                    def.resolve();
                 });
                 client1.connect(beEndpoint);
 
-                return deferred.promise;
+                return def.promise;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
     });
@@ -243,14 +243,14 @@ describe('SimpleQueue', function() {
         function _connectAndSend(count, endpoint, message, addMsgNumber) {
             var promises = [];
 
-            function getResolver(deferred, socket) {
+            function getResolver(def, socket) {
                 return function() {
-                   deferred.resolve(socket); 
+                   def.resolve(socket); 
                 };
             }
 
             for(var index=1; index<=count; index++) {
-                var deferred = _q.defer();
+                var def = _q.defer();
                 var socket = _createReqSocket();
 
                 socket.connect(endpoint);
@@ -258,9 +258,9 @@ describe('SimpleQueue', function() {
                     message = message + ' #' + index.toString();
                 }
                 socket.send(message);
-                socket.on('connect', getResolver(deferred, socket));
+                socket.on('connect', getResolver(def, socket));
 
-                promises.push(deferred.promise);
+                promises.push(def.promise);
             }
 
             return _q.all(promises);
@@ -357,7 +357,7 @@ describe('SimpleQueue', function() {
                 var client = _createReqSocket();
                 var worker = _createReqSocket();
                 var clientMessage = 'MESSAGE';
-                var deferred = _q.defer();
+                var def = _q.defer();
 
                 worker.on('message', function() {
                     var frames = Array.prototype.splice.call(arguments, 0);
@@ -365,15 +365,15 @@ describe('SimpleQueue', function() {
                         expect(frames).to.have.length(3);
                         expect(frames[1].toString()).to.equal('');
                         expect(frames[2].toString()).to.equal(clientMessage);
-                    }, deferred);
+                    }, def);
                 });
 
                 worker.connect(beEndpoint);
-                worker.send(READY_MESSAGE);
+                worker.send(MessageDefinitions.READY);
                 client.connect(feEndpoint);
                 client.send(clientMessage);
 
-                return deferred.promise;
+                return def.promise;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
@@ -386,25 +386,26 @@ describe('SimpleQueue', function() {
                 var worker = _createReqSocket();
                 worker.on('message', function() {
                     var frames = Array.prototype.splice.call(arguments, 0);
-                    worker.send([frames[0], frames[1], 'ECHO::' + frames[2].toString()]);
+                    worker.send([frames[0], frames[1], 'OK', 'ECHO::' + frames[2].toString()]);
                 });
                 worker.connect(beEndpoint);
-                worker.send(READY_MESSAGE);
+                worker.send(MessageDefinitions.READY);
             }
 
             function createClient(message) {
-                var deferred = _q.defer();
+                var def = _q.defer();
                 var client = _createReqSocket();
                 client.on('message', function() {
                     var frames = Array.prototype.splice.call(arguments, 0);
-                    deferred.resolve(frames);
+                    def.resolve(frames);
                 });
                 client.connect(feEndpoint);
                 client.send(message);
 
-                return expect(deferred.promise).to.be.fulfilled.then(function(frames){
-                    expect(frames).to.have.length(1);
-                    expect(frames[0].toString()).to.equal('ECHO::' + message);
+                return expect(def.promise).to.be.fulfilled.then(function(frames){
+                    expect(frames).to.have.length(2);
+                    expect(frames[0].toString()).to.equal('OK');
+                    expect(frames[1].toString()).to.equal('ECHO::' + message);
                 });
             }
 
