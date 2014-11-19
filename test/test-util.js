@@ -1,6 +1,7 @@
 /* jshint node:true, expr:true */
 'use strict';
 
+var _util = require('util');
 var _uuid = require('node-uuid');
 var _q = require('q');
 
@@ -13,7 +14,7 @@ module.exports = {
      * @return {String} An ipc endpoint string.
      */
     generateEndpoint: function() {
-        return 'ipc://' + _uuid.v4();
+        return 'ipc://ep-' + _uuid.v4();
     },
     /**
      * Gets a method that executes the specified task after a delay. The method
@@ -71,7 +72,11 @@ module.exports = {
                deferred.resolve();
            }
        } catch(ex) {
-           deferred.reject(ex);
+           if(ex.message) {
+               deferred.reject(ex.message);
+           } else {
+               deferred.reject(_util.inspect(ex));
+           }
        }
        return deferred;
     },

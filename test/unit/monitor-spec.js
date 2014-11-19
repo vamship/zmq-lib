@@ -50,6 +50,7 @@ describe('Monitor', function() {
             expect(monitor).to.be.an('object');
             expect(monitor).to.have.property('start').and.to.be.a('function');
             expect(monitor).to.have.property('clear').and.to.be.a('function');
+            expect(monitor).to.have.property('resetExpiryCount').and.to.be.a('function');
             expect(monitor).to.have.property('getExpiryCount').and.to.be.a('function');
             expect(monitor).to.have.property('getFrequency').and.to.be.a('function');
             expect(monitor).to.have.property('getMaxExpiryCount').and.to.be.a('function');
@@ -107,7 +108,7 @@ describe('Monitor', function() {
             var startTime = Date.now();
             monitor.start(function() {
                 var endTime = Date.now();
-                var min = DEFAULT_FREQUENCY;
+                var min = DEFAULT_FREQUENCY - 3;
                 var max = DEFAULT_FREQUENCY + 3;
                 _testUtils.runDeferred(function(){
                     expect(endTime - startTime).to.be.within(min, max);
@@ -203,13 +204,51 @@ describe('Monitor', function() {
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
-        it('should set the in progress flag to false when invoked.', function() {
+        it('should set the in progress flag to false when invoked', function() {
             var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
 
             monitor.start(function() {});
             monitor.clear();
 
             expect(monitor.isInProgress()).to.be.false;
+        });
+    });
+
+    describe('resetExpiryCount()', function(done) {
+        it('should reset the expiry count to 0 when invoked', function(done) {
+            var def = _q.defer();
+            var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
+
+            monitor.start(function() {
+                _testUtils.runDeferred(function(){
+                    expect(monitor.getExpiryCount()).to.equal(1);
+                    monitor.resetExpiryCount();
+                    expect(monitor.getExpiryCount()).to.equal(0);
+                }, def);
+            });
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should set keep the in progress flag unchanged when invoked while the monitor is not running', function() {
+            var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
+
+            var isInProgress = monitor.isInProgress();
+
+            monitor.resetExpiryCount();
+
+            expect(monitor.isInProgress()).to.equal(isInProgress);
+        });
+
+        it('should set keep the in progress flag unchanged when invoked while the monitor is running', function() {
+            var monitor = new Monitor(DEFAULT_FREQUENCY, DEFAULT_MAX_HIT_COUNT);
+
+            monitor.start(function() {});
+
+            var isInProgress = monitor.isInProgress();
+            monitor.resetExpiryCount();
+
+            expect(monitor.isInProgress()).to.equal(isInProgress);
         });
     });
 });

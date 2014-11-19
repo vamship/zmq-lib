@@ -13,7 +13,7 @@ _chai.use(require('chai-as-promised'));
 var expect = _chai.expect;
 var _testUtils = require('../test-util');
 var SimpleQueue = require('../../lib/simple-queue');
-var MessageDefinitions = require('../../lib/message-definitions');
+var _messageDefinitions = require('../../lib/message-definitions');
 
 describe('SimpleQueue', function() {
     var DEFAULT_DELAY = 10;
@@ -369,7 +369,7 @@ describe('SimpleQueue', function() {
                 });
 
                 worker.connect(beEndpoint);
-                worker.send(MessageDefinitions.READY);
+                worker.send(_messageDefinitions.READY);
                 client.connect(feEndpoint);
                 client.send(clientMessage);
 
@@ -389,7 +389,7 @@ describe('SimpleQueue', function() {
                     worker.send([frames[0], frames[1], 'OK', 'ECHO::' + frames[2].toString()]);
                 });
                 worker.connect(beEndpoint);
-                worker.send(MessageDefinitions.READY);
+                worker.send(_messageDefinitions.READY);
             }
 
             function createClient(message) {
