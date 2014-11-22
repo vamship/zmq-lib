@@ -192,28 +192,28 @@ describe('LazyPirateClient', function() {
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
-        it('should raise a "ready" event once a response is received to a request', function(done) {
+        it('should raise a "response" event with the response once a response is received to a request', function(done) {
             var def = _q.defer();
             var endpoint = _testUtils.generateEndpoint();
             var clientMessage = 'hello';
+            var responseMessage = 'OK';
 
             _queue = _createQueue(endpoint);
             _client = _createLPClient(endpoint);
             
             _queue.on('message', function(message) {
-                _queue.send('OK');
+                _queue.send(responseMessage);
             });
 
-            var eventCount = 0;
             _client.on(_eventDefinitions.READY, function() {
-                eventCount++;
+                _client.send(clientMessage);
+            });
 
-                if(eventCount > 1) {
-                    // If this condition is not met, the test will timeout and fail.
-                    def.resolve();
-                } else {
-                    _client.send(clientMessage);
-                }
+            _client.on(_eventDefinitions.RESPONSE, function(frames) {
+                _testUtils.runDeferred(function() {
+                    expect(frames).to.have.length(1);
+                    expect(frames[0].toString()).to.equal(responseMessage);
+                }, def);
             });
 
             _client.initialize();
@@ -254,17 +254,14 @@ describe('LazyPirateClient', function() {
                 _queue.send('OK');
             });
 
-            var eventCount = 0;
             _client.on(_eventDefinitions.READY, function() {
-                eventCount++;
+                _client.send(clientMessage);
+            });
 
-                if(eventCount > 1) {
-                    _testUtils.runDeferred(function() {
-                        expect(_client.isReady()).to.be.true;
-                    }, def);
-                } else {
-                    _client.send(clientMessage);
-                }
+            _client.on(_eventDefinitions.RESPONSE, function() {
+                _testUtils.runDeferred(function() {
+                    expect(_client.isReady()).to.be.true;
+                }, def);
             });
 
             _client.initialize();
