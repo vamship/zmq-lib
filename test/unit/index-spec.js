@@ -11,5 +11,6 @@ describe('index', function() {
         expect(_index).to.have.property('SimpleQueue').and.to.be.a('function');
         expect(_index).to.have.property('ParanoidPirateWorker').and.to.be.a('function');
         expect(_index).to.have.property('MessageDefinitions').and.to.be.an('object');
+        expect(_index).to.have.property('EventDefinitions').and.to.be.an('object');
     });
 });
