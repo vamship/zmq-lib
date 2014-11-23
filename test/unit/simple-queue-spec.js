@@ -14,6 +14,7 @@ var expect = _chai.expect;
 var _testUtils = require('../test-util');
 var SimpleQueue = require('../../lib/simple-queue');
 var _messageDefinitions = require('../../lib/message-definitions');
+var _eventDefinitions = require('../../lib/event-definitions');
 
 describe('SimpleQueue', function() {
     var DEFAULT_DELAY = 10;
@@ -101,6 +102,7 @@ describe('SimpleQueue', function() {
         it('should create an object that exposes members required by the interface', function() {
             _queue = _createQueue();
 
+            expect(_queue).to.be.an.instanceof(_events.EventEmitter);
             expect(_queue).to.have.property('initialize').and.to.be.a('function');
             expect(_queue).to.have.property('dispose').and.to.be.a('function');
             expect(_queue).to.have.property('getPendingRequestCount').and.to.be.a('function');
@@ -288,13 +290,114 @@ describe('SimpleQueue', function() {
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var count = 3;
-                var promise = _connectAndSend(count, beEndpoint, 'READY');
+                var promise = _connectAndSend(count, beEndpoint, _messageDefinitions.READY);
 
                 var doTests = _testUtils.getDelayedRunner(function() {
                     expect(_queue.getAvailableWorkerCount()).to.equal(count);
                 }, DEFAULT_DELAY);
 
                 return expect(promise).to.be.fulfilled.then(doTests);
+            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
+        it('should raise the "REQUEST" event when a request is received from the client', function(done){
+            var feEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint);
+
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
+                var client = _createReqSocket();
+                client.identity = _uuid.v4();
+
+                var clientMessage = 'MESSAGE';
+                var def = _q.defer();
+
+                _queue.on(_eventDefinitions.REQUEST, function(clientId, frames) {
+                    _testUtils.runDeferred(function() {
+                        expect(clientId.toString()).to.equal(client.identity);
+                        expect(frames).to.have.length(3);
+                        expect(frames[0].toString()).to.equal(client.identity);
+                        expect(frames[1].toString()).to.be.empty;
+                        expect(frames[2].toString()).to.equal(clientMessage);
+                    }, def);
+                });
+
+                client.connect(feEndpoint);
+                client.send(clientMessage);
+                
+                return def.promise;
+            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
+        it('should raise the "ASSIGNED_REQUEST" event when a task has been assigned to a worker', function(done){
+            var feEndpoint = _testUtils.generateEndpoint();
+            var beEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint, beEndpoint);
+
+            expect(_queue.initialize()).to.be.fulfilled.then(function() {
+                var client = _createReqSocket();
+                client.identity = _uuid.v4();
+                var worker = _createReqSocket();
+                worker.identity = _uuid.v4();
+
+                var clientMessage = 'MESSAGE';
+                var def = _q.defer();
+
+                _queue.on(_eventDefinitions.ASSIGNED_REQUEST, function(workerId, frames) {
+                    _testUtils.runDeferred(function() {
+                        expect(workerId.toString()).to.equal(worker.identity);
+                        expect(frames).to.have.length(5);
+                        expect(frames[0].toString()).to.equal(worker.identity);
+                        expect(frames[1].toString()).to.be.empty;
+                        expect(frames[2].toString()).to.equal(client.identity);
+                        expect(frames[3].toString()).to.be.empty;
+                        expect(frames[4].toString()).to.equal(clientMessage);
+                    }, def);
+                });
+
+                worker.connect(beEndpoint);
+                worker.send(_messageDefinitions.READY);
+                client.connect(feEndpoint);
+                client.send(clientMessage);
+
+                return def.promise;
+            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
+        it('should raise the "ASSIGNED_RESPONSE" event when a response has been assigned to a client', function(done){
+            var feEndpoint = _testUtils.generateEndpoint();
+            var beEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint, beEndpoint);
+
+            expect(_queue.initialize()).to.be.fulfilled.then(function() {
+                var client = _createReqSocket();
+                client.identity = _uuid.v4();
+                var worker = _createReqSocket();
+                worker.identity = _uuid.v4();
+                var clientMessage = 'MESSAGE';
+                var workerResponse = 'OK';
+                var def = _q.defer();
+
+                worker.on('message', function() {
+                    var frames = Array.prototype.splice.call(arguments, 0);
+                    worker.send([frames[0], frames[1], workerResponse]);
+                });
+
+                _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function(clientId, frames) {
+                    _testUtils.runDeferred(function() {
+                        expect(clientId.toString()).to.equal(client.identity);
+                        expect(frames).to.have.length(3);
+                        expect(frames[0].toString()).to.equal(client.identity);
+                        expect(frames[1].toString()).to.be.empty;
+                        expect(frames[2].toString()).to.equal(workerResponse);
+                    }, def);
+                });
+
+                worker.connect(beEndpoint);
+                worker.send(_messageDefinitions.READY);
+                client.connect(feEndpoint);
+                client.send(clientMessage);
+
+                return def.promise;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
@@ -305,7 +408,7 @@ describe('SimpleQueue', function() {
 
             expect(_queue.initialize()).to.be.fulfilled.then(function() {
                 var workerCount = 3;
-                var workerPromise = _connectAndSend(workerCount, beEndpoint, 'READY');
+                var workerPromise = _connectAndSend(workerCount, beEndpoint, _messageDefinitions.READY);
 
                 var connectClients = _testUtils.getDelayedRunner(function(){
                     var clientCount = 3;
@@ -334,7 +437,7 @@ describe('SimpleQueue', function() {
 
                 var connectWorkers = _testUtils.getDelayedRunner(function() {
                     var workerCount = 3;
-                    var workerPromise = _connectAndSend(workerCount, beEndpoint, 'READY');
+                    var workerPromise = _connectAndSend(workerCount, beEndpoint, _messageDefinitions.READY);
                     
                     var doTests = _testUtils.getDelayedRunner(function() {
                         expect(_queue.getAvailableWorkerCount()).to.equal(0);
