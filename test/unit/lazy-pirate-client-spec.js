@@ -338,6 +338,46 @@ describe('LazyPirateClient', function() {
                 expect(def.promise).to.be.fulfilled.notify(done);
             });
         });
+
+        it('should stop retrying once a valid response has been received from the peer', function(done) {
+                var def = _q.defer();
+                var endpoint = _testUtils.generateEndpoint();
+                var clientMessage = 'hello';
+                var messageCounter = 0;
+                var retryDuration = 100;
+                var retryCount = 3;
+
+                function initRepSocket() {
+                    _queue = _createQueue(endpoint);
+                    _queue.on('message', function(message) {
+                        messageCounter++;
+                        _queue.send('ok');
+                    });
+                }
+
+                initRepSocket();
+                _client = _createLPClient(endpoint, new Monitor(retryDuration, retryCount));
+
+                _client.on(_eventDefinitions.READY, function() {
+                    _client.send(clientMessage);
+                });
+
+                _client.on(_eventDefinitions.RESPONSE, function() {
+                    def.resolve();
+                });
+
+                _client.initialize();
+
+                var doTests = _testUtils.getDelayedRunner(function() {
+                    expect(messageCounter).to.equal(1);
+                }, retryDuration * retryCount);
+
+                expect(def.promise).to.be.fulfilled.then(doTests).then(function() {
+                    done();
+                }, function(err) {
+                    done(err);
+                });
+        });
     });
     
     describe('dispose()', function() {
