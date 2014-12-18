@@ -13,6 +13,7 @@
   "author": "Vamshi K Ponnapalli <vamshi.ponnapalli@gmail.com>",
   "license": "ISC",
   "dependencies": {
+    "clone": "^0.1.19",
     "q": "^1.1.1",
     "uuid": "^2.0.1",
     "winston": "^0.8.3",
