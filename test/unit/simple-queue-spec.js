@@ -483,7 +483,7 @@ describe('SimpleQueue', function() {
         it('should send replies from the worker back to the correct client', function(done) {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            _queue = new SimpleQueue(feEndpoint, beEndpoint);
+            _queue = _createQueue(feEndpoint, beEndpoint);
 
             function createEchoWorker() {
                 var worker = _createReqSocket();
