@@ -119,7 +119,7 @@ describe('SimpleQueue', function() {
         });
     });
 
-    describe('initialize', function() {
+    describe('initialize()', function() {
         
         it('should return a promise when invoked', function(){
             _queue = _createQueue();
@@ -208,7 +208,7 @@ describe('SimpleQueue', function() {
         });
     });
 
-    describe('dispose', function() {
+    describe('dispose()', function() {
         it('should return a promise when invoked', function(done) {
             _queue = _createQueue();
 
