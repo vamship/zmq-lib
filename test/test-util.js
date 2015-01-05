@@ -16,6 +16,7 @@ module.exports = {
     generateEndpoint: function() {
         return 'ipc://ep-' + _uuid.v4();
     },
+
     /**
      * Gets a method that executes the specified task after a delay. The method
      * also returns a promise that will be resolved or rejected based on the 
