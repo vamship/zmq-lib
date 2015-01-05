@@ -114,6 +114,7 @@ module.exports = function(grunt) {
          *  - Remove temporary files and folders.
          */
         clean: {
+            tempFiles: [ ENV.ROOT.getChildPath('ep-*') ],
             coverage: [ ENV.ROOT.coverage.getPath() ]
         },
 
