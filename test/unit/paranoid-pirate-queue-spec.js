@@ -393,6 +393,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should increment the pending request count if a request is received and no workers are available', function(done){
             var clientCount = 3;
+            var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint);
 
@@ -402,7 +403,7 @@ describe('ParanoidPirateQueue', function() {
 
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_createAndConnectSockets('client', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets('MESSAGE'))
+                .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
                 .then(doTests)
