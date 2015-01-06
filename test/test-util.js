@@ -32,10 +32,13 @@ module.exports = {
      *                    a promise after execution.
      */
     getDelayedRunner: function(task, delay) {
-        return function() {
+        return function(data) {
+            var expectations = function() {
+                return task(data);
+            };
             var deferred = _q.defer();
             setTimeout(function(){
-                module.exports.runDeferred(task, deferred);
+                module.exports.runDeferred(expectations, deferred);
             }, delay);
             
             return deferred.promise;
@@ -64,13 +67,13 @@ module.exports = {
            var ret = expectations();
            // Poor man's check to see if the return value is a promise.
            if(ret && typeof ret.then === 'function') {
-               ret.then(function() {
-                   deferred.resolve();
+               ret.then(function(data) {
+                   deferred.resolve(data);
                }, function(err) {
                    deferred.reject(err);
                });
            } else {
-               deferred.resolve();
+               deferred.resolve(ret);
            }
        } catch(ex) {
            if(ex.message) {

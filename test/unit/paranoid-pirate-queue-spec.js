@@ -13,7 +13,6 @@ _chai.use(require('chai-as-promised'));
 var expect = _chai.expect;
 var _testUtils = require('../test-util');
 
-var Monitor = require('../../lib/monitor');
 var ParanoidPirateQueue = require('../../lib/paranoid-pirate-queue');
 var _messageDefinitions = require('../../lib/message-definitions');
 var _eventDefinitions = require('../../lib/event-definitions');
@@ -49,22 +48,39 @@ describe('ParanoidPirateQueue', function() {
         }
     }
 
-    function _createMonitor(frequency, retryCount) {
-        frequency = frequency || 2500;
-        retryCount = retryCount || 3;
+    function _createWorkerOptions(pollFrequency, workerTimeout) {
+        pollFrequency = pollFrequency || 1000;
+        workerTimeout = workerTimeout || 3000;
 
-        return new Monitor(frequency, retryCount);
+        return {
+            pollFrequency: pollFrequency,
+            workerTimeout: workerTimeout
+        };
     }
 
-    function _createQueue(feEndpoint, beEndpoint, monitor) {
+    function _createQueue(feEndpoint, beEndpoint, workerOptions) {
         feEndpoint = feEndpoint || _testUtils.generateEndpoint();
         beEndpoint = beEndpoint || _testUtils.generateEndpoint();
-        monitor = monitor || _createMonitor();
-        return new ParanoidPirateQueue(feEndpoint, beEndpoint, monitor);
+        workerOptions = workerOptions || _createWorkerOptions();
+        return new ParanoidPirateQueue(feEndpoint, beEndpoint, workerOptions);
     }
 
-    function _createReqSocket() {
+    function _createReqSocket(id) {
         var socket =  _zmq.createSocket('req');
+        if(id) {
+            socket.identity = id;
+        }
+        socket.monitor(10);
+        _sockets.push(socket);
+        
+        return socket;
+    }
+
+    function _createDealerSocket(id) {
+        var socket =  _zmq.createSocket('dealer');
+        if(id) {
+            socket.identity = id;
+        }
         socket.monitor(10);
         _sockets.push(socket);
         
@@ -73,7 +89,7 @@ describe('ParanoidPirateQueue', function() {
 
     describe('ctor()', function() {
         it('should throw an error if invoked with an invalid front end endpoint', function() {
-            var error = 'Invalid front end endpoint specified (arg #1)';
+            var error = 'invalid front end endpoint specified (arg #1)';
 
             function createQueue(feEndpoint) {
                 return function() {
@@ -92,7 +108,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should throw an error if invoked with an invalid back end endpoint', function() {
             var feEndpoint = _testUtils.generateEndpoint();
-            var error = 'Invalid back end endpoint specified (arg #2)';
+            var error = 'invalid back end endpoint specified (arg #2)';
 
             function createQueue(beEndpoint) {
                 return function() {
@@ -109,21 +125,60 @@ describe('ParanoidPirateQueue', function() {
             expect(createQueue({})).to.throw(error);
         });
 
-        it('should throw an error if a valid retry monitor object is not specified', function() {
+        it('should throw an error if valid worker options are not specified', function() {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            var error = 'Invalid monitor specified (arg #3)';
+            var error = 'invalid worker options specified (arg #3)';
 
-            function createQueue(monitor) {
+            function createQueue(options) {
                 return function() {
-                    return new ParanoidPirateQueue(feEndpoint, beEndpoint, monitor);
+                    return new ParanoidPirateQueue(feEndpoint, beEndpoint, options);
                 };
             }
-
             expect(createQueue()).to.throw(error);
             expect(createQueue(null)).to.throw(error);
-            expect(createQueue('')).to.throw(error);
+            expect(createQueue('abc')).to.throw(error);
             expect(createQueue(1)).to.throw(error);
+            expect(createQueue(true)).to.throw(error);
+        });
+
+        it('should throw an error if the worker options does not include a poll frequency', function() {
+            var feEndpoint = _testUtils.generateEndpoint();
+            var beEndpoint = _testUtils.generateEndpoint();
+            var error = 'worker options does not define a poll frequency property (workerOptions.pollFrequency)';
+
+            function createQueue(pollFrequency) {
+                var options = { pollFrequency: pollFrequency};
+                return function() {
+                    return new ParanoidPirateQueue(feEndpoint, beEndpoint, options);
+                };
+            }
+            expect(createQueue()).to.throw(error);
+            expect(createQueue(null)).to.throw(error);
+            expect(createQueue('abc')).to.throw(error);
+            expect(createQueue(0)).to.throw(error);
+            expect(createQueue(-1)).to.throw(error);
+            expect(createQueue(true)).to.throw(error);
+            expect(createQueue([])).to.throw(error);
+            expect(createQueue({})).to.throw(error);
+        });
+
+        it('should throw an error if the worker options does not include a worker timeout', function() {
+            var feEndpoint = _testUtils.generateEndpoint();
+            var beEndpoint = _testUtils.generateEndpoint();
+            var error = 'worker options does not define a worker timeout property (workerOptions.workerTimeout)';
+
+            function createQueue(workerTimeout) {
+                var options = { pollFrequency: 1000, workerTimeout: workerTimeout};
+                return function() {
+                    return new ParanoidPirateQueue(feEndpoint, beEndpoint, options);
+                };
+            }
+            expect(createQueue()).to.throw(error);
+            expect(createQueue(null)).to.throw(error);
+            expect(createQueue('abc')).to.throw(error);
+            expect(createQueue(0)).to.throw(error);
+            expect(createQueue(-1)).to.throw(error);
             expect(createQueue(true)).to.throw(error);
             expect(createQueue([])).to.throw(error);
             expect(createQueue({})).to.throw(error);
@@ -137,7 +192,7 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue).to.have.property('dispose').and.to.be.a('function');
             expect(_queue).to.have.property('getPendingRequestCount').and.to.be.a('function');
             expect(_queue).to.have.property('getAvailableWorkerCount').and.to.be.a('function');
-            expect(_queue).to.have.property('listKnownWorkers').and.to.be.a('function');
+            expect(_queue).to.have.property('getWorkerMap').and.to.be.a('function');
             expect(_queue).to.have.property('isReady').and.to.be.a('function');
         });
 
@@ -146,12 +201,12 @@ describe('ParanoidPirateQueue', function() {
 
             expect(_queue.getPendingRequestCount()).to.equal(0);
             expect(_queue.getAvailableWorkerCount()).to.equal(0);
-            expect(_queue.listKnownWorkers()).to.deep.equal({});
+            expect(_queue.getWorkerMap()).to.deep.equal({});
             expect(_queue.isReady()).to.be.false;
         });
     });
 
-    describe('initialize', function() {
+    describe('initialize()', function() {
         it('should return a promise when invoked', function(){
             _queue = _createQueue();
 
@@ -227,19 +282,19 @@ describe('ParanoidPirateQueue', function() {
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var def = _q.defer();
-                var client1 = _createReqSocket();
+                var worker = _createDealerSocket();
 
-                client1.on('connect', function(){
+                worker.on('connect', function(){
                     def.resolve();
                 });
-                client1.connect(beEndpoint);
+                worker.connect(beEndpoint);
 
                 return def.promise;
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
     });
 
-    describe('dispose', function() {
+    describe('dispose()', function() {
         it('should return a promise when invoked', function(done) {
             _queue = _createQueue();
 
@@ -273,292 +328,657 @@ describe('ParanoidPirateQueue', function() {
 
     describe('[BROKER LOGIC]', function() {
 
-        function _connectAndSend(count, endpoint, message, addMsgNumber) {
-            var promises = [];
-
-            function getResolver(def, socket) {
-                return function() {
-                   def.resolve(socket); 
-                };
-            }
-
-            for(var index=1; index<=count; index++) {
-                var def = _q.defer();
-                var socket = _createReqSocket();
-
-                socket.connect(endpoint);
-                if(addMsgNumber) {
-                    message = message + ' #' + index.toString();
-                }
-                socket.send(message);
-                socket.on('connect', getResolver(def, socket));
-
-                promises.push(def.promise);
-            }
-
-            return _q.all(promises);
+        function _getResolver(def, socket) {
+            return function() {
+               def.resolve(socket); 
+            };
         }
-        
-        it('should increment the pending request count if a request is received, when no workers are available', function(done){
+
+        function _wait(delay) {
+            delay = delay || DEFAULT_DELAY;
+            return _testUtils.getDelayedRunner(function(data) {
+                return data;
+            }, delay);
+        }
+
+        function _waitForResolution(def) {
+            return function() {
+                return def.promise;
+            };
+        }
+
+        function _createAndConnectSockets(type, count, endpoint, setIds) {
+            return function() {
+                var promises = [];
+
+                for(var index=1; index<=count; index++) {
+                    var def = _q.defer();
+                    var id = setIds? _uuid.v4():null;
+                    var socket = (type === 'client')? _createReqSocket(id):
+                                                      _createDealerSocket(id);
+
+                    socket.connect(endpoint);
+                    socket.on('connect', _getResolver(def, socket));
+
+                    promises.push(def.promise);
+                }
+                return _q.all(promises);
+            };
+        }
+
+        function _sendMessagesOverSockets() {
+            var messages = Array.prototype.splice.call(arguments, 0);
+            return function(sockets) {
+                var messageIndex = 0;
+                sockets.forEach(function(socket) {
+                    var message = messages[messageIndex];
+                    messageIndex = (messageIndex + 1) % messages.length;
+
+                    socket.send(message);
+                });
+
+                return sockets;
+            };
+        }
+
+        function _setupSocketHandlers(event, handler) {
+            return function(sockets) {
+                sockets.forEach(function(socket) {
+                    socket.on(event, handler.bind(socket));
+                });
+
+                return sockets;
+            };
+        }
+
+        it('should increment the pending request count if a request is received and no workers are available', function(done){
+            var clientCount = 3;
             var feEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var count = 3;
-                var promise = _connectAndSend(count, feEndpoint, 'MESSAGE');
+            var doTests = function() {
+                expect(_queue.getPendingRequestCount()).to.equal(clientCount);
+            };
 
-                var doTests = _testUtils.getDelayedRunner(function() {
-                    expect(_queue.getPendingRequestCount()).to.equal(count);
-                }, DEFAULT_DELAY);
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets('MESSAGE'))
+                .then(_wait())
 
-                return expect(promise).to.be.fulfilled.then(doTests);
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
-        it('should increment the available workers count if a worker sends a message, when no requests are available', function(done){
+        it('should increment the available workers count if a worker sends a message and no requests are available', function(done){
+            var workerCount = 3;
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(null, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var count = 3;
-                var promise = _connectAndSend(count, beEndpoint, _messageDefinitions.READY);
+            var doTests = function() {
+                expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
+            };
 
-                var doTests = _testUtils.getDelayedRunner(function() {
-                    expect(_queue.getAvailableWorkerCount()).to.equal(count);
-                }, DEFAULT_DELAY);
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_wait())
 
-                return expect(promise).to.be.fulfilled.then(doTests);
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should raise the "REQUEST" event when a request is received from the client', function(done){
+            var client = null;
+            var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var client = _createReqSocket();
-                client.identity = _uuid.v4();
+            var captureClientRef = function(clients) {
+                client = clients[0];
+                return clients;
+            };
 
-                var clientMessage = 'MESSAGE';
-                var def = _q.defer();
+            var def = _q.defer();
+            _queue.on(_eventDefinitions.REQUEST, function(clientId, frames) {
+                _testUtils.runDeferred(function() {
+                    expect(clientId.toString()).to.equal(client.identity);
+                    expect(frames).to.have.length(3);
+                    expect(frames[0].toString()).to.equal(clientId.toString());
+                    expect(frames[1].toString()).to.be.empty;
+                    expect(frames[2].toString()).to.equal(clientMessage);
+                }, def);
+            });
 
-                _queue.on(_eventDefinitions.REQUEST, function(clientId, frames) {
-                    _testUtils.runDeferred(function() {
-                        expect(clientId.toString()).to.equal(client.identity);
-                        expect(frames).to.have.length(3);
-                        expect(frames[0].toString()).to.equal(client.identity);
-                        expect(frames[1].toString()).to.be.empty;
-                        expect(frames[2].toString()).to.equal(clientMessage);
-                    }, def);
-                });
-
-                client.connect(feEndpoint);
-                client.send(clientMessage);
-                
-                return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(captureClientRef)
+                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_waitForResolution(def))
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should raise the "ASSIGNED_REQUEST" event when a task has been assigned to a worker', function(done){
+            var worker = null;
+            var client = null;
+            var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function() {
-                var client = _createReqSocket();
-                client.identity = _uuid.v4();
-                var worker = _createReqSocket();
-                worker.identity = _uuid.v4();
+            var captureClientRef = function(clients) {
+                client = clients[0];
+                return clients;
+            };
 
-                var clientMessage = 'MESSAGE';
-                var def = _q.defer();
+            var captureWorkerRef = function(workers) {
+                worker = workers[0];
+                return workers;
+            };
 
-                _queue.on(_eventDefinitions.ASSIGNED_REQUEST, function(workerId, frames) {
-                    _testUtils.runDeferred(function() {
-                        expect(workerId.toString()).to.equal(worker.identity);
-                        expect(frames).to.have.length(5);
-                        expect(frames[0].toString()).to.equal(worker.identity);
-                        expect(frames[1].toString()).to.be.empty;
-                        expect(frames[2].toString()).to.equal(client.identity);
-                        expect(frames[3].toString()).to.be.empty;
-                        expect(frames[4].toString()).to.equal(clientMessage);
-                    }, def);
-                });
+            var def = _q.defer();
+            _queue.on(_eventDefinitions.ASSIGNED_REQUEST, function(workerId, frames) {
+                _testUtils.runDeferred(function() {
+                    expect(workerId.toString()).to.equal(worker.identity);
 
-                worker.connect(beEndpoint);
-                worker.send(_messageDefinitions.READY);
-                client.connect(feEndpoint);
-                client.send(clientMessage);
+                    expect(frames).to.have.length(4);
+                    expect(frames[0].toString()).to.equal(workerId.toString());
+                    expect(frames[1].toString()).to.equal(client.identity);
+                    expect(frames[2].toString()).to.be.empty;
+                    expect(frames[3].toString()).to.equal(clientMessage);
+                }, def);
+            });
 
-                return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(captureWorkerRef)
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+
+                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(captureClientRef)
+                .then(_sendMessagesOverSockets(clientMessage))
+
+                .then(_waitForResolution(def))
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should raise the "ASSIGNED_RESPONSE" event when a response has been assigned to a client', function(done){
+            var clientMessage = 'MESSAGE';
+            var workerResponse = 'OK';
+            var client = null;
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function() {
-                var client = _createReqSocket();
-                client.identity = _uuid.v4();
-                var worker = _createReqSocket();
-                worker.identity = _uuid.v4();
-                var clientMessage = 'MESSAGE';
-                var workerResponse = 'OK';
-                var def = _q.defer();
+            var captureClientRef = function(clients) {
+                client = clients[0];
+                return clients;
+            };
 
-                worker.on('message', function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    worker.send([frames[0], frames[1], workerResponse]);
-                });
+            var def = _q.defer();
+            _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function(clientId, frames) {
+                _testUtils.runDeferred(function() {
+                    expect(clientId.toString()).to.equal(client.identity);
+                    expect(frames).to.have.length(3);
+                    expect(frames[0].toString()).to.equal(client.identity);
+                    expect(frames[1].toString()).to.be.empty;
+                    expect(frames[2].toString()).to.equal(workerResponse);
+                }, def);
+            });
 
-                _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function(clientId, frames) {
-                    _testUtils.runDeferred(function() {
-                        expect(clientId.toString()).to.equal(client.identity);
-                        expect(frames).to.have.length(3);
-                        expect(frames[0].toString()).to.equal(client.identity);
-                        expect(frames[1].toString()).to.be.empty;
-                        expect(frames[2].toString()).to.equal(workerResponse);
-                    }, def);
-                });
+            var workerMessageHandler = function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                this.send([frames[0], frames[1], workerResponse]);
+            };
 
-                worker.connect(beEndpoint);
-                worker.send(_messageDefinitions.READY);
-                client.connect(feEndpoint);
-                client.send(clientMessage);
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(_setupSocketHandlers('message', workerMessageHandler))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(captureClientRef)
+                .then(_sendMessagesOverSockets(clientMessage))
+
+                .then(_waitForResolution(def))
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should immediately dispatch a new request to a worker if one is available', function(done){
+            var clientCount = 3;
+            var workerCount = 3;
+            var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function() {
-                var workerCount = 3;
-                var workerPromise = _connectAndSend(workerCount, beEndpoint, _messageDefinitions.READY);
+            var doTests = function() {
+                expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                expect(_queue.getPendingRequestCount()).to.equal(0);
+            };
 
-                var connectClients = _testUtils.getDelayedRunner(function(){
-                    var clientCount = 3;
-                    var clientPromise = _connectAndSend(clientCount, feEndpoint, 'MESSAGE');
-                    
-                    var doTests = _testUtils.getDelayedRunner(function() {
-                        expect(_queue.getAvailableWorkerCount()).to.equal(0);
-                        expect(_queue.getPendingRequestCount()).to.equal(0);
-                    }, DEFAULT_DELAY);
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_wait())
 
-                    return expect(clientPromise).to.be.fulfilled.then(doTests);
-                }, DEFAULT_DELAY);
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_wait())
 
-                return expect(workerPromise).to.be.fulfilled.then(connectClients);
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should immediately provide a newly ready worker with a request if one is available', function(done){
+            var clientCount = 3;
+            var workerCount = 3;
+            var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function() {
-                var clientCount = 3;
-                var clientPromise = _connectAndSend(clientCount, feEndpoint, 'MESSAGE');
+            var doTests = function() {
+                expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                expect(_queue.getPendingRequestCount()).to.equal(0);
+            };
 
-                var connectWorkers = _testUtils.getDelayedRunner(function() {
-                    var workerCount = 3;
-                    var workerPromise = _connectAndSend(workerCount, beEndpoint, _messageDefinitions.READY);
-                    
-                    var doTests = _testUtils.getDelayedRunner(function() {
-                        expect(_queue.getAvailableWorkerCount()).to.equal(0);
-                        expect(_queue.getPendingRequestCount()).to.equal(0);
-                    }, DEFAULT_DELAY);
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_wait())
 
-                    return expect(workerPromise).to.be.fulfilled.then(doTests);
-                }, DEFAULT_DELAY);
+                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_wait())
 
-                return expect(clientPromise).to.be.fulfilled.then(connectWorkers);
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should send the request to the worker in the correct format', function(done){
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
+            var clientMessage = 'MESSAGE';
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var client = _createReqSocket();
-                var worker = _createReqSocket();
-                var clientMessage = 'MESSAGE';
-                var def = _q.defer();
+            var def = _q.defer();
+            var workerMessageHandler = function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                _testUtils.runDeferred(function() {
+                    expect(frames).to.have.length(3);
+                    expect(frames[1].toString()).to.equal('');
+                    expect(frames[2].toString()).to.equal(clientMessage);
+                }, def);
+            };
 
-                worker.on('message', function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    _testUtils.runDeferred(function() {
-                        expect(frames).to.have.length(3);
-                        expect(frames[1].toString()).to.equal('');
-                        expect(frames[2].toString()).to.equal(clientMessage);
-                    }, def);
-                });
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(_setupSocketHandlers('message', workerMessageHandler))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                worker.connect(beEndpoint);
-                worker.send(_messageDefinitions.READY);
-                client.connect(feEndpoint);
-                client.send(clientMessage);
+                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(_sendMessagesOverSockets(clientMessage))
 
-                return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_waitForResolution(def))
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
         it('should send replies from the worker back to the correct client', function(done) {
+            var clientCount = 2;
+            var workerCount = 2;
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, beEndpoint);
 
-            function createEchoWorker() {
-                var worker = _createReqSocket();
-                worker.on('message', function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    worker.send([frames[0], frames[1], 'OK', 'ECHO::' + frames[2].toString()]);
-                });
-                worker.connect(beEndpoint);
-                worker.send(_messageDefinitions.READY);
+            var workerMessageHandler = function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                this.send([frames[0], frames[1], 'OK', 'ECHO::' + frames[2].toString()]);
+            };
+
+            var sendMessagesFromClients = function() {
+                var messages = Array.prototype.splice.call(arguments, 0);
+                return function(sockets) {
+                    var promises = [];
+                    var messageIndex = 0;
+                    sockets.forEach(function(socket) {
+                        var def = _q.defer();
+                        socket.on('message', function() {
+                            var frames = Array.prototype.splice.call(arguments, 0);
+                            def.resolve([frames, message]);
+                        });
+                        promises.push(def.promise);
+
+                        var message = messages[messageIndex];
+                        messageIndex = (messageIndex + 1) % messages.length;
+
+                        socket.send(message);
+                    });
+
+                    return _q.all(promises);
+                };
             }
 
-            function createClient(message) {
-                var def = _q.defer();
-                var client = _createReqSocket();
-                client.on('message', function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    def.resolve(frames);
-                });
-                client.connect(feEndpoint);
-                client.send(message);
-
-                return expect(def.promise).to.be.fulfilled.then(function(frames){
+            var doTests = function(results) {
+                results.forEach(function(result) {
+                    var frames = result[0];
+                    var message = result[1];
                     expect(frames).to.have.length(2);
                     expect(frames[0].toString()).to.equal('OK');
                     expect(frames[1].toString()).to.equal('ECHO::' + message);
                 });
             }
 
-            expect(_queue.initialize()).to.be.fulfilled.then(function(){
-                var client1 = _createReqSocket();
-                var client2 = _createReqSocket();
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_setupSocketHandlers('message', workerMessageHandler))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                createEchoWorker();
-                createEchoWorker();
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(sendMessagesFromClients('message #1', 'message #2'))
 
-                var client1Promise = createClient('client1');
-                var client2Promise = createClient('client2');
-
-                return _q.all([
-                    expect(client1Promise).to.be.fulfilled,
-                    expect(client2Promise).to.be.fulfilled
-                ]);
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
+        describe('[HEARTBEAT/EXPIRY LOGIC]', function() {
+
+            it('should store worker metadata when a new worker makes a connection', function(done) {
+                var workerCount = 3;
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(null, beEndpoint);
+
+                var doTests = function() {
+                    var knownWorkers = _queue.getWorkerMap();
+                    var now = Date.now();
+
+                    expect(knownWorkers).to.not.be.empty;
+                    for(var workerId in knownWorkers) {
+                        var worker = knownWorkers[workerId];
+                        
+                        expect(worker).to.be.an('object');
+                        expect(worker).to.have.property('address').and.to.be.an('object');
+                        expect(worker).to.have.property('id', workerId);
+                        expect(worker).to.have.property('lastContact').and.to.be.within(now-50, now+50);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should update worker timestamp when the worker sends a heartbeat', function(done) {
+                var workerCount = 3;
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var initialWorkerMap = null;
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var captureInitialWorkerMap = function(workers) {
+                    initialWorkerMap = _queue.getWorkerMap();
+                    return workers;
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(workerMap).to.not.be.empty;
+                    for(var workerId in workerMap) {
+                        var workerInfo = workerMap[workerId];
+                        var initialWorkerInfo = initialWorkerMap[workerId];
+                            
+                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
+                        expect(initialWorkerInfo.lastContact).to.be.below(workerInfo.lastContact);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(captureInitialWorkerMap)
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should update worker timestamp when the worker replies to a request', function(done) {
+                var workerCount = 3;
+                var clientCount = 3;
+                var workerResponse = 'OK';
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var initialWorkerMap = null;
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var def = _q.defer();
+                var responseCount = workerCount;
+                _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function() {
+                    responseCount--;
+                    if(responseCount === 0) {
+                        // Run tests after both workers have responded.
+                        def.resolve();
+                    }
+                });
+
+                var workerMessageHandler = function() {
+                    var frames = Array.prototype.splice.call(arguments, 0);
+                    this.send([frames[0], frames[1], workerResponse]);
+                };
+
+                var captureInitialWorkerMap = function(workers) {
+                    initialWorkerMap = _queue.getWorkerMap();
+                    return workers;
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(workerMap).to.not.be.empty;
+                    for(var workerId in workerMap) {
+                        var workerInfo = workerMap[workerId];
+                        var initialWorkerInfo = initialWorkerMap[workerId];
+                            
+                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
+                        expect(initialWorkerInfo.lastContact).to.be.below(workerInfo.lastContact);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMessageHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(captureInitialWorkerMap)
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets('message #1', 'message #2'))
+                    .then(_waitForResolution(def))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should respond to a heartbeat with another heartbeat', function(done) {
+                var workerCount = 2;
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var frameSets = [];
+                var def = _q.defer();
+                var responseCount = workerCount;
+                var workerMessageHandler = function() {
+                    var frames = Array.prototype.splice.call(arguments, 0);
+                    frameSets.push(frames);
+
+                    responseCount--;
+                    if(responseCount === 0) {
+                        def.resolve();
+                    }
+                };
+
+                var doTests = function(workers) {
+                    frameSets.forEach(function(frames) {
+                        expect(frames).to.have.length(1);
+                        expect(frames[0].toString()).to.equal(_messageDefinitions.HEARTBEAT);
+                    });
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMessageHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_waitForResolution(def))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should not add a worker sending a heartbeat to the available workers list', function(done) {
+                var workerCount = 3;
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(null, beEndpoint);
+
+                var doTests = function() {
+                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should not send a pending request to a worker sending a heartbeat', function(done) {
+                var workerCount = 3;
+                var clientCount = 4;
+                var clientMessage = 'MESSAGE';
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var doTests = function() {
+                    expect(_queue.getPendingRequestCount()).to.equal(clientCount - workerCount);
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should discard a worker if workerTimeout expires since last contact with the worker', function(done) {
+                var workerCount = 3;
+                var pollFrequency = 100;
+                var workerTimeout = 300;
+                var beEndpoint = _testUtils.generateEndpoint();
+
+                _queue = _createQueue(null, beEndpoint, {
+                    pollFrequency: pollFrequency,
+                    workerTimeout: workerTimeout
+                });
+
+                var verifyWorkerCount = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
+                    expect(Object.keys(workerMap)).to.have.length(workerCount);
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                    expect(workerMap).to.be.empty;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(verifyWorkerCount)
+                    .then(_wait(pollFrequency * 4))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should not send a request to a worker whose timeout has expired', function(done) {
+                var clientCount = 3;
+                var workerCount = 3;
+                var clientMessage = 'MESSAGE';
+                var pollFrequency = 100;
+                var workerTimeout = 300;
+                var expiredWorkerHandler = _sinon.spy();
+                var validWorkerHandler = _sinon.spy();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtils.generateEndpoint();
+
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: pollFrequency,
+                    workerTimeout: workerTimeout
+                });
+
+                var verifyWorkerCount = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                    expect(Object.keys(workerMap)).to.have.length(0);
+                };
+
+                var doTests = function() {
+                    expect(expiredWorkerHandler).not.to.have.not.been.called;
+                    expect(validWorkerHandler).to.have.been.calledThrice;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', expiredWorkerHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait(pollFrequency * 4))
+
+                    .then(verifyWorkerCount)
+
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', validWorkerHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', workerCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+        });
     });
 });
