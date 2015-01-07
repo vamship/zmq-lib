@@ -481,11 +481,12 @@ describe('ParanoidPirateQueue', function() {
                 _testUtils.runDeferred(function() {
                     expect(workerId.toString()).to.equal(worker.identity);
 
-                    expect(frames).to.have.length(4);
+                    expect(frames).to.have.length(5);
                     expect(frames[0].toString()).to.equal(workerId.toString());
-                    expect(frames[1].toString()).to.equal(client.identity);
-                    expect(frames[2].toString()).to.be.empty;
-                    expect(frames[3].toString()).to.equal(clientMessage);
+                    expect(frames[1].toString()).to.equal(_messageDefinitions.REQUEST);
+                    expect(frames[2].toString()).to.equal(client.identity);
+                    expect(frames[3].toString()).to.be.empty;
+                    expect(frames[4].toString()).to.equal(clientMessage);
                 }, def);
             });
 
@@ -528,7 +529,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([frames[0], frames[1], workerResponse]);
+                this.send([frames[1], frames[2], workerResponse]);
             };
 
             expect(_queue.initialize()).to.be.fulfilled
@@ -606,9 +607,10 @@ describe('ParanoidPirateQueue', function() {
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 _testUtils.runDeferred(function() {
-                    expect(frames).to.have.length(3);
-                    expect(frames[1].toString()).to.equal('');
-                    expect(frames[2].toString()).to.equal(clientMessage);
+                    expect(frames).to.have.length(4);
+                    expect(frames[0].toString()).to.equal(_messageDefinitions.REQUEST);
+                    expect(frames[2].toString()).to.equal('');
+                    expect(frames[3].toString()).to.equal(clientMessage);
                 }, def);
             };
 
@@ -633,7 +635,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([frames[0], frames[1], 'OK', 'ECHO::' + frames[2].toString()]);
+                this.send([frames[1], frames[2], 'OK', 'ECHO::' + frames[3].toString()]);
             };
 
             var sendMessagesFromClients = function() {
