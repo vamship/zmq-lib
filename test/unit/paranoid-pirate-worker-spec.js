@@ -182,9 +182,8 @@ describe('ParanoidPirateWorker', function(){
                 var frames = Array.prototype.splice.call(arguments, 0);
 
                 _testUtils.runDeferred(function() {
-                    expect(frames).to.have.length(3);
-                    expect(frames[1].toString()).to.equal('');
-                    expect(frames[2].toString()).to.equal(_messageDefinitions.READY);
+                    expect(frames).to.have.length(2);
+                    expect(frames[1].toString()).to.equal(_messageDefinitions.READY);
                 }, def);
             });
 
@@ -247,10 +246,10 @@ describe('ParanoidPirateWorker', function(){
                 
                 //We're going to get a READY message when the worker is
                 //initialized. Ignore that and go to the next message.
-                if(frames[2].toString() !== _messageDefinitions.READY) {
+                if(frames[1].toString() !== _messageDefinitions.READY) {
                     _testUtils.runDeferred(function(){
-                        expect(frames).to.have.length(3);
-                        expect(frames[2].toString()).to.equal(message);
+                        expect(frames).to.have.length(2);
+                        expect(frames[1].toString()).to.equal(message);
                     }, def);
                 } 
             });
@@ -275,7 +274,7 @@ describe('ParanoidPirateWorker', function(){
             
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                if(frames[2].toString() === _messageDefinitions.READY) {
+                if(frames[1].toString() === _messageDefinitions.READY) {
                     _queue.send([frames[0], 
                                 _messageDefinitions.REQUEST, message1, message2]);
                 }
@@ -343,7 +342,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
 
-                var action = frames[2].toString();
+                var action = frames[1].toString();
                 if(action === _messageDefinitions.HEARTBEAT) {
                     heartBeatCount++;
                     if(heartBeatCount === 3) {
@@ -389,7 +388,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
 
-                var action = frames[2].toString();
+                var action = frames[1].toString();
                 switch(action) {
                     case _messageDefinitions.READY:
                         receivedReady = true;
@@ -430,7 +429,7 @@ describe('ParanoidPirateWorker', function(){
 
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                var action = frames[2].toString();
+                var action = frames[1].toString();
                 if(action === _messageDefinitions.HEARTBEAT) {
                     heartBeatCount++;
                 }
@@ -576,7 +575,7 @@ describe('ParanoidPirateWorker', function(){
 
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                var action = frames[2].toString();
+                var action = frames[1].toString();
                 if(action === _messageDefinitions.HEARTBEAT) {
                     heartBeatCount++;
                 }
