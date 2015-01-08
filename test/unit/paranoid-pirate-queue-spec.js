@@ -87,6 +87,76 @@ describe('ParanoidPirateQueue', function() {
         return socket;
     }
 
+    function _getResolver(def, socket) {
+        return function() {
+           def.resolve(socket); 
+        };
+    }
+
+    function _wait(delay) {
+        delay = delay || DEFAULT_DELAY;
+        return _testUtils.getDelayedRunner(function(data) {
+            return data;
+        }, delay);
+    }
+
+    function _waitForResolution(def) {
+        return function() {
+            return def.promise;
+        };
+    }
+
+    function _createAndConnectSockets(type, count, endpoint, setIds) {
+        return function() {
+            var promises = [];
+
+            for(var index=1; index<=count; index++) {
+                var def = _q.defer();
+                var id = setIds? _uuid.v4():null;
+                var socket = (type === 'client')? _createReqSocket(id):
+                                                  _createDealerSocket(id);
+
+                socket.connect(endpoint);
+                socket.on('connect', _getResolver(def, socket));
+
+                promises.push(def.promise);
+            }
+            return _q.all(promises);
+        };
+    }
+
+    function _sendMessagesOverSockets() {
+        var messages = Array.prototype.splice.call(arguments, 0);
+        return function(sockets) {
+            var messageIndex = 0;
+            sockets.forEach(function(socket) {
+                var message = messages[messageIndex];
+                messageIndex = (messageIndex + 1) % messages.length;
+
+                socket.send(message);
+            });
+
+            return sockets;
+        };
+    }
+
+    function _setupSocketHandlers(event, handlers) {
+        if(! (handlers instanceof Array)) {
+            handlers = [ handlers ];
+        }
+        return function(sockets) {
+            var handlerIndex = 0;
+            sockets.forEach(function(socket) {
+                var handler = handlers[handlerIndex];
+                handlerIndex = (handlerIndex + 1) % handlers.length;
+
+                socket.on(event, handler.bind(socket));
+            });
+
+            return sockets;
+        };
+    }
+
     describe('ctor()', function() {
         it('should throw an error if invoked with an invalid front end endpoint', function() {
             var error = 'invalid front end endpoint specified (arg #1)';
@@ -193,6 +263,7 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue).to.have.property('getPendingRequestCount').and.to.be.a('function');
             expect(_queue).to.have.property('getAvailableWorkerCount').and.to.be.a('function');
             expect(_queue).to.have.property('getWorkerMap').and.to.be.a('function');
+            expect(_queue).to.have.property('getSessionMap').and.to.be.a('function');
             expect(_queue).to.have.property('isReady').and.to.be.a('function');
         });
 
@@ -202,6 +273,7 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue.getPendingRequestCount()).to.equal(0);
             expect(_queue.getAvailableWorkerCount()).to.equal(0);
             expect(_queue.getWorkerMap()).to.deep.equal({});
+            expect(_queue.getSessionMap()).to.deep.equal({});
             expect(_queue.isReady()).to.be.false;
         });
     });
@@ -294,6 +366,120 @@ describe('ParanoidPirateQueue', function() {
         });
     });
 
+    describe('getWorkerMap()', function() {
+        it('should return an empty object when no workers have connected', function() {
+            _queue = _createQueue();
+
+            expect(_queue.getWorkerMap()).to.deep.equal({});
+        });
+
+        it('should return a copy of the map, and not a reference', function() {
+            _queue = _createQueue();
+
+            var map = _queue.getWorkerMap();
+            expect(map).to.deep.equal({});
+            expect(_queue.getWorkerMap()).not.to.equal(map);
+        });
+
+        it('should return a map with an entry for every worker that connects', function(done) {
+            var workerCount = 10;
+            var beEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(null, beEndpoint);
+
+            var doTests = function() {
+                var map = _queue.getWorkerMap();
+
+                expect(Object.keys(map)).to.have.length(workerCount);
+                for(var workerId in map) {
+                    var worker = map[workerId];
+
+                    expect(worker).to.be.an('object');
+                    expect(worker).to.have.property('id').and.to.be.a('string');
+                    expect(worker).to.have.property('lastAccess').and.to.be.a('number');
+                    expect(worker).to.have.property('address').and.to.be.an('object');
+                }
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_wait())
+
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+    });
+
+    describe('getSessionMap()', function() {
+        it('should return an empty object when no clients have connected', function() {
+            _queue = _createQueue();
+
+            expect(_queue.getSessionMap()).to.deep.equal({});
+        });
+
+        it('should return a copy of the map, and not a reference', function() {
+            _queue = _createQueue();
+
+            var map = _queue.getSessionMap();
+            expect(map).to.deep.equal({});
+            expect(_queue.getSessionMap()).not.to.equal(map);
+        });
+
+        it('should return an empty object if session affinity is not enabled, even if clients have connected', function(done) {
+            var clientCount = 10;
+            var clientMessage = 'MESSAGE';
+            var feEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint);
+
+            var doTests = function() {
+                var map = _queue.getSessionMap();
+                expect(_queue.getSessionMap()).to.deep.equal({});
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_wait())
+
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
+        it('should return a map with an entry for every client that connects, if session affinity has been enabled', function(done) {
+            var clientCount = 10;
+            var feEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint, null, {
+                pollFrequency: 3000,
+                workerTimeout: 9000,
+                session: {
+                    timeout: 30000
+                }
+            });
+
+            var doTests = function() {
+                var map = _queue.getSessionMap();
+
+                expect(Object.keys(map)).to.have.length(clientCount);
+                for(var clientId in map) {
+                    var client = map[clientId];
+
+                    expect(client).to.be.an('object');
+                    expect(client).to.have.property('id').and.to.be.a('string');
+                    expect(client).to.have.property('lastAccess').and.to.be.a('number');
+                    expect(client).to.have.property('workerId').and.to.be.an('string');
+                }
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_wait())
+
+                .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+    });
+
     describe('dispose()', function() {
         it('should return a promise when invoked', function(done) {
             _queue = _createQueue();
@@ -339,69 +525,6 @@ describe('ParanoidPirateQueue', function() {
     });
 
     describe('[BROKER LOGIC]', function() {
-
-        function _getResolver(def, socket) {
-            return function() {
-               def.resolve(socket); 
-            };
-        }
-
-        function _wait(delay) {
-            delay = delay || DEFAULT_DELAY;
-            return _testUtils.getDelayedRunner(function(data) {
-                return data;
-            }, delay);
-        }
-
-        function _waitForResolution(def) {
-            return function() {
-                return def.promise;
-            };
-        }
-
-        function _createAndConnectSockets(type, count, endpoint, setIds) {
-            return function() {
-                var promises = [];
-
-                for(var index=1; index<=count; index++) {
-                    var def = _q.defer();
-                    var id = setIds? _uuid.v4():null;
-                    var socket = (type === 'client')? _createReqSocket(id):
-                                                      _createDealerSocket(id);
-
-                    socket.connect(endpoint);
-                    socket.on('connect', _getResolver(def, socket));
-
-                    promises.push(def.promise);
-                }
-                return _q.all(promises);
-            };
-        }
-
-        function _sendMessagesOverSockets() {
-            var messages = Array.prototype.splice.call(arguments, 0);
-            return function(sockets) {
-                var messageIndex = 0;
-                sockets.forEach(function(socket) {
-                    var message = messages[messageIndex];
-                    messageIndex = (messageIndex + 1) % messages.length;
-
-                    socket.send(message);
-                });
-
-                return sockets;
-            };
-        }
-
-        function _setupSocketHandlers(event, handler) {
-            return function(sockets) {
-                sockets.forEach(function(socket) {
-                    socket.on(event, handler.bind(socket));
-                });
-
-                return sockets;
-            };
-        }
 
         it('should increment the pending request count if a request is received and no workers are available', function(done){
             var clientCount = 3;
@@ -713,7 +836,7 @@ describe('ParanoidPirateQueue', function() {
                         expect(worker).to.be.an('object');
                         expect(worker).to.have.property('address').and.to.be.an('object');
                         expect(worker).to.have.property('id', workerId);
-                        expect(worker).to.have.property('lastContact').and.to.be.within(now-50, now+50);
+                        expect(worker).to.have.property('lastAccess').and.to.be.within(now-50, now+50);
                     }
                 };
 
@@ -747,7 +870,7 @@ describe('ParanoidPirateQueue', function() {
                         var initialWorkerInfo = initialWorkerMap[workerId];
                             
                         expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
-                        expect(initialWorkerInfo.lastContact).to.be.below(workerInfo.lastContact);
+                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
                     }
                 };
 
@@ -802,7 +925,7 @@ describe('ParanoidPirateQueue', function() {
                         var initialWorkerInfo = initialWorkerMap[workerId];
                             
                         expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
-                        expect(initialWorkerInfo.lastContact).to.be.below(workerInfo.lastContact);
+                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
                     }
                 };
 
@@ -947,6 +1070,349 @@ describe('ParanoidPirateQueue', function() {
             });
 
             it('should not send a request to a worker whose timeout has expired', function(done) {
+                var clientCount = 3;
+                var workerCount = 3;
+                var clientMessage = 'MESSAGE';
+                var pollFrequency = 100;
+                var workerTimeout = 300;
+                var expiredWorkerHandler = _sinon.spy();
+                var validWorkerHandler = _sinon.spy();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtils.generateEndpoint();
+
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: pollFrequency,
+                    workerTimeout: workerTimeout
+                });
+
+                var verifyWorkerCount = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                    expect(Object.keys(workerMap)).to.have.length(0);
+                };
+
+                var doTests = function() {
+                    expect(expiredWorkerHandler).not.to.have.not.been.called;
+                    expect(validWorkerHandler).to.have.been.calledThrice;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', expiredWorkerHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait(pollFrequency * 4))
+
+                    .then(verifyWorkerCount)
+
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', validWorkerHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', workerCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+        });
+
+        describe('[SESSION LOGIC]', function() {
+
+            function _initializeWorkers(workerIds) {
+                var workerMap = {};
+                var handlers = [];
+                var count = 0;
+                workerIds.forEach(function(workerId) {
+                    var worker = {
+                        id: workerId,
+                        messages: [],
+                        handler: function() {}
+                    }
+
+                    workerMap[workerId] = worker;
+                    worker.handler = _sinon.stub(worker, 'handler', function() {
+                        var frames = Array.prototype.splice.call(arguments, 0);
+
+                        worker.messages.push(frames[3].toString());
+                        if(frames.length < 3 || frames[2] !== 'block') {
+                            this.send([frames[1], frames[2], 'OK']);
+                        }
+                    });
+
+                    handlers.push(worker.handler);
+                    count++;
+                });
+
+                workerMap._handlers = handlers;
+                workerMap._count = count;
+                return workerMap;
+            }
+
+            xit('should distribute requests from one client to multiple workers when session affinity has not been enabled', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000
+                });
+
+                var clientIds = [ 'client1', 'client2' ];
+                var workerMap = _initializeWorkers(['worker1', 'worker2']);
+
+                var doTests = function() {
+                    for(var workerId in workerMap) {
+                        var worker = workerMap[workerId];
+                        if(worker.id) {
+                            expect(worker.messages).to.include.members(clientIds);
+                        }
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'], [clientIds[1], 'no-block']))
+                    .then(_wait())
+
+                    // Send messages in reverse order, so that they are distributed across workers.
+                    .then(_sendMessagesOverSockets([clientIds[1], 'block'], [clientIds[0], 'no-block']))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should route all requests from a specific client to a specific worker when session affinity is enabled', function() {
+            });
+
+            xit('should update worker timestamp when the worker sends a heartbeat', function(done) {
+                var workerCount = 3;
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var initialWorkerMap = null;
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var captureInitialWorkerMap = function(workers) {
+                    initialWorkerMap = _queue.getWorkerMap();
+                    return workers;
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(workerMap).to.not.be.empty;
+                    for(var workerId in workerMap) {
+                        var workerInfo = workerMap[workerId];
+                        var initialWorkerInfo = initialWorkerMap[workerId];
+                            
+                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
+                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(captureInitialWorkerMap)
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should update worker timestamp when the worker replies to a request', function(done) {
+                var workerCount = 3;
+                var clientCount = 3;
+                var workerResponse = 'OK';
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var initialWorkerMap = null;
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var def = _q.defer();
+                var responseCount = workerCount;
+                _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function() {
+                    responseCount--;
+                    if(responseCount === 0) {
+                        // Run tests after both workers have responded.
+                        def.resolve();
+                    }
+                });
+
+                var workerMessageHandler = function() {
+                    var frames = Array.prototype.splice.call(arguments, 0);
+                    this.send([frames[0], frames[1], workerResponse]);
+                };
+
+                var captureInitialWorkerMap = function(workers) {
+                    initialWorkerMap = _queue.getWorkerMap();
+                    return workers;
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(workerMap).to.not.be.empty;
+                    for(var workerId in workerMap) {
+                        var workerInfo = workerMap[workerId];
+                        var initialWorkerInfo = initialWorkerMap[workerId];
+                            
+                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
+                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMessageHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(captureInitialWorkerMap)
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets('message #1', 'message #2'))
+                    .then(_waitForResolution(def))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should respond to a heartbeat with another heartbeat', function(done) {
+                var workerCount = 2;
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var frameSets = [];
+                var def = _q.defer();
+                var responseCount = workerCount;
+                var workerMessageHandler = function() {
+                    var frames = Array.prototype.splice.call(arguments, 0);
+                    frameSets.push(frames);
+
+                    responseCount--;
+                    if(responseCount === 0) {
+                        def.resolve();
+                    }
+                };
+
+                var doTests = function(workers) {
+                    frameSets.forEach(function(frames) {
+                        expect(frames).to.have.length(1);
+                        expect(frames[0].toString()).to.equal(_messageDefinitions.HEARTBEAT);
+                    });
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMessageHandler))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_waitForResolution(def))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should not add a worker sending a heartbeat to the available workers list', function(done) {
+                var workerCount = 3;
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(null, beEndpoint);
+
+                var doTests = function() {
+                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should not send a pending request to a worker sending a heartbeat', function(done) {
+                var workerCount = 3;
+                var clientCount = 4;
+                var clientMessage = 'MESSAGE';
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint);
+
+                var doTests = function() {
+                    expect(_queue.getPendingRequestCount()).to.equal(clientCount - workerCount);
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should discard a worker if workerTimeout expires since last contact with the worker', function(done) {
+                var workerCount = 3;
+                var pollFrequency = 100;
+                var workerTimeout = 300;
+                var beEndpoint = _testUtils.generateEndpoint();
+
+                _queue = _createQueue(null, beEndpoint, {
+                    pollFrequency: pollFrequency,
+                    workerTimeout: workerTimeout
+                });
+
+                var verifyWorkerCount = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
+                    expect(Object.keys(workerMap)).to.have.length(workerCount);
+                };
+
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+
+                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
+                    expect(workerMap).to.be.empty;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(verifyWorkerCount)
+                    .then(_wait(pollFrequency * 4))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            xit('should not send a request to a worker whose timeout has expired', function(done) {
                 var clientCount = 3;
                 var workerCount = 3;
                 var clientMessage = 'MESSAGE';
