@@ -306,6 +306,18 @@ describe('ParanoidPirateQueue', function() {
             }).then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
+        it('should stop the monitor when dispose is invoked', function(done) {
+            _queue = _createQueue();
+
+            expect(_queue.initialize()).to.be.fulfilled.then(function(){
+                return _queue.dispose();
+            }).then(function() {
+                // Accessing a "private" variable here. Not ideal, but there
+                // are no other options.
+                expect(_queue._monitor.isInProgress()).to.be.false;
+            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
         it('should resolve the promise once the sockets have been successfully closed', function(done){
             _queue = _createQueue();
 
