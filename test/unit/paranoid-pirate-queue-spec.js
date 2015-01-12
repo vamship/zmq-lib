@@ -1139,7 +1139,6 @@ describe('ParanoidPirateQueue', function() {
             });
 
             it('should not mark a worker as available when a heartbeat is received', function(done) {
-                this.timeout(10000);
                 var workerCount = 3;
                 var clientCount = 3;
                 var clientMessage = 'MESSAGE';
@@ -1297,6 +1296,7 @@ describe('ParanoidPirateQueue', function() {
             function _initializeWorkers(workerIds) {
                 var workerMap = {};
                 var handlers = [];
+                var workerList = [];
                 var count = 0;
                 workerIds.forEach(function(workerId) {
                     var worker = {
@@ -1310,21 +1310,29 @@ describe('ParanoidPirateQueue', function() {
                         var frames = Array.prototype.splice.call(arguments, 0);
 
                         worker.messages.push(frames[3].toString());
-                        if(frames.length < 3 || frames[2] !== 'block') {
+                        if(frames.length < 5 || frames[4].toString() !== 'block') {
                             this.send([frames[1], frames[2], 'OK']);
+                            worker.unblock = function() {};
+                        } else {
+                            var socket = this;
+                            worker.unblock = function() {
+                                socket.send([frames[1], frames[2], 'OK']);
+                            };
                         }
                     });
 
+                    workerList.push(worker);
                     handlers.push(worker.handler);
                     count++;
                 });
 
+                workerMap._workerList = workerList;
                 workerMap._handlers = handlers;
                 workerMap._count = count;
                 return workerMap;
             }
 
-            xit('should distribute requests from one client to multiple workers when session affinity has not been enabled', function(done) {
+            it('should distribute requests from one client to multiple workers when session has not been enabled', function(done) {
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
                 _queue = _createQueue(feEndpoint, beEndpoint, {
@@ -1336,12 +1344,15 @@ describe('ParanoidPirateQueue', function() {
                 var workerMap = _initializeWorkers(['worker1', 'worker2']);
 
                 var doTests = function() {
-                    for(var workerId in workerMap) {
-                        var worker = workerMap[workerId];
-                        if(worker.id) {
-                            expect(worker.messages).to.include.members(clientIds);
-                        }
-                    }
+                    workerMap._workerList.forEach(function(worker) {
+                        expect(worker.messages).to.include.members(clientIds);
+                    });
+                };
+
+                var sendMessagesInReverseOrder = function(sockets) {
+                    sockets[1].send([clientIds[1], 'block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
@@ -1355,280 +1366,472 @@ describe('ParanoidPirateQueue', function() {
                     .then(_wait())
 
                     // Send messages in reverse order, so that they are distributed across workers.
-                    .then(_sendMessagesOverSockets([clientIds[1], 'block'], [clientIds[0], 'no-block']))
+                    .then(sendMessagesInReverseOrder)
                     .then(_wait())
 
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            xit('should route all requests from a specific client to a specific worker when session affinity is enabled', function() {
-            });
-
-            xit('should update worker timestamp when the worker sends a heartbeat', function(done) {
-                var workerCount = 3;
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                var initialWorkerMap = null;
-                _queue = _createQueue(feEndpoint, beEndpoint);
-
-                var saveInitialWorkerMap = function(workers) {
-                    initialWorkerMap = _queue.getWorkerMap();
-                    return workers;
-                };
-
-                var doTests = function() {
-                    var workerMap = _queue.getWorkerMap();
-
-                    expect(workerMap).to.not.be.empty;
-                    for(var workerId in workerMap) {
-                        var workerInfo = workerMap[workerId];
-                        var initialWorkerInfo = initialWorkerMap[workerId];
-                            
-                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
-                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
-                    }
-                };
-
-                expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(saveInitialWorkerMap)
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
-
-                    .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
-            });
-
-            xit('should update worker timestamp when the worker replies to a request', function(done) {
-                var workerCount = 3;
+            it('should create a new session, and add the client request to the pending request queue if no workers are available', function(done) {
                 var clientCount = 3;
-                var workerResponse = 'OK';
+                var clientMessage = 'MESSAGE';
                 var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                var initialWorkerMap = null;
-                _queue = _createQueue(feEndpoint, beEndpoint);
-
-                var def = _q.defer();
-                var responseCount = workerCount;
-                _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function() {
-                    responseCount--;
-                    if(responseCount === 0) {
-                        // Run tests after both workers have responded.
-                        def.resolve();
+                _queue = _createQueue(feEndpoint, null, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
                     }
                 });
 
-                var workerMessageHandler = function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    this.send([frames[0], frames[1], workerResponse]);
-                };
-
-                var saveInitialWorkerMap = function(workers) {
-                    initialWorkerMap = _queue.getWorkerMap();
-                    return workers;
-                };
-
+                var now = Date.now();
                 var doTests = function() {
-                    var workerMap = _queue.getWorkerMap();
+                    var sessionMap = _queue.getSessionMap();
+                    expect(Object.keys(sessionMap)).to.have.length(clientCount);
 
-                    expect(workerMap).to.not.be.empty;
-                    for(var workerId in workerMap) {
-                        var workerInfo = workerMap[workerId];
-                        var initialWorkerInfo = initialWorkerMap[workerId];
-                            
-                        expect(initialWorkerInfo.address).to.deep.equal(workerInfo.address);
-                        expect(initialWorkerInfo.lastAccess).to.be.below(workerInfo.lastAccess);
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+                        expect(session.id).to.be.a('string').and.not.to.be.empty;
+                        expect(session.lastAccess).to.be.above(now);
+                        expect(session.workerId).to.be.a('string').and.to.be.empty;
                     }
+                    expect(_queue.getPendingRequestCount()).to.equal(clientCount);
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMessageHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(saveInitialWorkerMap)
                     .then(_createAndConnectSockets('client', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets('message #1', 'message #2'))
-                    .then(_waitForResolution(def))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
 
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            xit('should respond to a heartbeat with another heartbeat', function(done) {
-                var workerCount = 2;
+            it('should create a new session and assign a new client a free worker if one is available', function(done) {
+                var workerCount = 3;
+                var clientCount = 3;
+                var clientMessage = 'MESSAGE';
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
 
-                var frameSets = [];
-                var def = _q.defer();
-                var responseCount = workerCount;
-                var workerMessageHandler = function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    frameSets.push(frames);
+                var now = Date.now();
+                var doTests = function() {
+                    var workerMap = _queue.getWorkerMap();
+                    var sessionMap = _queue.getSessionMap();
+                    expect(Object.keys(sessionMap)).to.have.length(clientCount);
 
-                    responseCount--;
-                    if(responseCount === 0) {
-                        def.resolve();
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+                        expect(session.id).to.be.a('string').and.not.to.be.empty;
+                        expect(session.lastAccess).to.be.above(now);
+                        expect(session.workerId).to.be.a('string').and.not.to.be.empty;
+                        expect(workerMap).to.contain.keys(session.workerId);
                     }
                 };
 
-                var doTests = function(workers) {
-                    frameSets.forEach(function(frames) {
-                        expect(frames).to.have.length(1);
-                        expect(frames[0].toString()).to.equal(_messageDefinitions.HEARTBEAT);
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should assign a worker id to an unassigned client session once a new worker becomes available', function(done) {
+                var workerCount = 3;
+                var clientCount = 3;
+                var clientMessage = 'MESSAGE';
+                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var now = Date.now();
+                var testForUnassignedSessions = function() {
+                    var sessionMap = _queue.getSessionMap();
+                    expect(Object.keys(sessionMap)).to.have.length(clientCount);
+
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+                        expect(session.id).to.be.a('string').and.not.to.be.empty;
+                        expect(session.lastAccess).to.be.above(now);
+                        expect(session.workerId).to.be.a('string').and.to.be.empty;
+                    }
+                    expect(_queue.getPendingRequestCount()).to.equal(clientCount);
+                };
+
+                var testForAssignedSessions = function() {
+                    var workerMap = _queue.getWorkerMap();
+                    var sessionMap = _queue.getSessionMap();
+                    expect(Object.keys(sessionMap)).to.have.length(clientCount);
+
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+                        expect(session.id).to.be.a('string').and.not.to.be.empty;
+                        expect(session.lastAccess).to.be.above(now);
+                        expect(session.workerId).to.be.a('string').and.not.to.be.empty;
+                        expect(workerMap).to.contain.keys(session.workerId);
+                    }
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(testForUnassignedSessions)
+
+                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(testForAssignedSessions)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should route all requests from a specific client to a specific worker once session has been established', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1', 'worker2' ];
+                var clientIds = [ 'client1', 'client2' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    var workerList = workerMap._workerList;
+                    
+                    expect(workerList[0].messages).to.deep.equal([clientIds[0], clientIds[0]]);
+                    expect(workerList[1].messages).to.deep.equal([clientIds[1], clientIds[1]]);
+                };
+
+                var sendMessagesInReverseOrder = function(sockets) {
+                    sockets[1].send([clientIds[1], 'no-block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
+                };
+
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'], [clientIds[1], 'no-block']))
+                    .then(_wait())
+
+                    // Send messages in reverse order, but expect session affinity to be honored
+                    .then(sendMessagesInReverseOrder)
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should enqueue a request on a worker specific queue if the session worker is not available', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1', 'worker2' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    var workers = _getContext('worker');
+                    var workerList = workerMap._workerList;
+
+
+                    var firstWorkerId = (new Buffer(workers[0].identity)).toString('base64');
+                    var secondWorkerId = (new Buffer(workers[1].identity)).toString('base64');
+
+                    var map = _queue.getWorkerMap();
+                    var firstWorker = map[firstWorkerId];
+                    var secondWorker = map[secondWorkerId];
+
+                    expect(firstWorker.pendingRequestCount).to.equal(1);
+                    expect(secondWorker.pendingRequestCount).to.equal(0);
+                    expect(workerList[0].messages).to.deep.equal([clientIds[0], clientIds[2]]);
+                    expect(workerList[1].messages).to.deep.equal([clientIds[1], clientIds[1]]);
+                };
+
+                var sendMessagesInReverseOrder = function(sockets) {
+                    sockets[1].send([clientIds[1], 'no-block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
+                    .then(_captureContext('worker'))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_captureContext('client'))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                                                   [clientIds[1], 'no-block'],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    //Create a few dummy workers that should never receive requests because
+                    //all clients already have sessions created.
+                    .then(_createAndConnectSockets('worker', 3, beEndpoint))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    // Send messages for clients #1, and #2 to build up pending message
+                    // count
+                    .then(_switchContext('client'))
+                    .then(sendMessagesInReverseOrder)
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should show the correct number of pending requests even when a request is added to a worker queue', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    expect(_queue.getPendingRequestCount()).to.equal(clientIds.length - 1);
+                };
+
+                var checkStateAndSendMessages = function(sockets) {
+                    expect(_queue.getPendingRequestCount()).to.equal(0);
+
+                    sockets[1].send([clientIds[1], 'no-block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                                                   [clientIds[1], 'no-block'],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    // Send messages for clients #1, and #2 to build up pending message
+                    // count
+                    .then(checkStateAndSendMessages)
+                    .then(_wait(500))
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should look in the worker specific queue for requests before looking in the common queue', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                var clientMessage = 'MESSAGE';
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    var workerList = workerMap._workerList;
+
+                    expect(workerList[0].messages).to.deep.equal([
+                        clientIds[0], clientIds[1], clientIds[2],
+                        clientIds[0], clientIds[1], clientIds[2]
+                    ]);
+                };
+
+                var unblockWorkers = function(sockets) {
+                    workerMap._workerList.forEach(function(worker) {
+                        worker.unblock();
                     });
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMessageHandler))
+                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_captureContext('client'))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                                                   [clientIds[1], 'no-block'],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_waitForResolution(def))
+                    //Send some requests to get queued.
+                    .then(_switchContext('client'))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                                                   [clientIds[1], 'no-block'],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    //Create dummy clients whose messages should never be processed
+                    .then(_createAndConnectSockets('client', 3, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    //Unblock the workers
+                    .then(unblockWorkers)
+                    .then(_wait())
 
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            xit('should not add a worker sending a heartbeat to the available workers list', function(done) {
-                var workerCount = 3;
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(null, beEndpoint);
-
-                var doTests = function() {
-                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
-                };
-
-                expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
-
-                    .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
-            });
-
-            xit('should not send a pending request to a worker sending a heartbeat', function(done) {
-                var workerCount = 3;
-                var clientCount = 4;
-                var clientMessage = 'MESSAGE';
+            it('should update session timestamp when a client sends a request', function(done) {
+                var clientCount = 3;
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                var clientMessage = 'MESSAGE';
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var initialSessionMap = null;
+                var saveInitialSessionMap = function(sockets) {
+                    initialSessionMap = _queue.getSessionMap();
+                    return sockets;
+                };
 
                 var doTests = function() {
-                    expect(_queue.getPendingRequestCount()).to.equal(clientCount - workerCount);
+                    var sessionMap = _queue.getSessionMap();
+
+                    expect(sessionMap).to.not.be.empty;
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+                        var initialSession = initialSessionMap[sessionId];
+                            
+                        expect(initialSession.id).to.deep.equal(session.id);
+                        expect(initialSession.lastAccess).to.be.below(session.lastAccess);
+                    }
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
                     .then(_createAndConnectSockets('client', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
+                    .then(saveInitialSessionMap)
+                    .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            xit('should discard a worker if workerTimeout expires since last contact with the worker', function(done) {
-                var workerCount = 3;
-                var pollFrequency = 100;
-                var workerTimeout = 300;
+            it('should discard the client session once the session timeout expires', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
-
-                _queue = _createQueue(null, beEndpoint, {
-                    pollFrequency: pollFrequency,
-                    workerTimeout: workerTimeout
-                });
-
-                var verifyWorkerCount = function() {
-                    var workerMap = _queue.getWorkerMap();
-
-                    expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
-                    expect(Object.keys(workerMap)).to.have.length(workerCount);
-                };
-
-                var doTests = function() {
-                    var workerMap = _queue.getWorkerMap();
-
-                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
-                    expect(workerMap).to.be.empty;
-                };
-
-                expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(verifyWorkerCount)
-                    .then(_wait(pollFrequency * 4))
-
-                    .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
-            });
-
-            xit('should not send a request to a worker whose timeout has expired', function(done) {
                 var clientCount = 3;
                 var workerCount = 3;
                 var clientMessage = 'MESSAGE';
-                var pollFrequency = 100;
-                var workerTimeout = 300;
-                var expiredWorkerHandler = _sinon.spy();
-                var validWorkerHandler = _sinon.spy();
-                var beEndpoint = _testUtils.generateEndpoint();
-                var feEndpoint = _testUtils.generateEndpoint();
-
+                var sessionTimeout = 500;
                 _queue = _createQueue(feEndpoint, beEndpoint, {
-                    pollFrequency: pollFrequency,
-                    workerTimeout: workerTimeout
+                    pollFrequency: sessionTimeout/2,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: sessionTimeout
+                    }
                 });
 
-                var verifyWorkerCount = function() {
-                    var workerMap = _queue.getWorkerMap();
+                var checkForValidSession = function() {
+                    var sessionMap = _queue.getSessionMap();
 
-                    expect(_queue.getAvailableWorkerCount()).to.equal(0);
-                    expect(Object.keys(workerMap)).to.have.length(0);
+                    expect(Object.keys(sessionMap)).to.have.length(clientCount);
+                    for(var sessionId in sessionMap) {
+                        var session = sessionMap[sessionId];
+
+                        expect(session).to.be.an('object');
+                    }
                 };
 
                 var doTests = function() {
-                    expect(expiredWorkerHandler).not.to.have.not.been.called;
-                    expect(validWorkerHandler).to.have.been.calledThrice;
+                    var sessionMap = _queue.getSessionMap();
+
+                    expect(sessionMap).to.be.empty;
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
                     .then(_createAndConnectSockets('worker', workerCount, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', expiredWorkerHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait(pollFrequency * 4))
-
-                    .then(verifyWorkerCount)
-
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', validWorkerHandler))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', workerCount, feEndpoint))
+                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_captureContext('client'))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
+
+                    .then(checkForValidSession)
+                    .then(_wait(sessionTimeout*1.5))
 
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
