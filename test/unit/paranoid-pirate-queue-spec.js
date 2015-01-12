@@ -67,21 +67,20 @@ describe('ParanoidPirateQueue', function() {
         }
     }
 
-    function _createWorkerOptions(pollFrequency, workerTimeout) {
-        pollFrequency = pollFrequency || 1000;
-        workerTimeout = workerTimeout || 3000;
+    function _ensureQueueOptions(options) {
+        var options = options || {};
+        options.pollFrequency = options.pollFrequency || 1000;
+        options.workerTimeout = options.workerTimeout || 3000;
+        options.requestTimeout = options.requestTimeout || 3000;
 
-        return {
-            pollFrequency: pollFrequency,
-            workerTimeout: workerTimeout
-        };
+        return options;
     }
 
-    function _createQueue(feEndpoint, beEndpoint, workerOptions) {
+    function _createQueue(feEndpoint, beEndpoint, queueOptions) {
         feEndpoint = feEndpoint || _testUtils.generateEndpoint();
         beEndpoint = beEndpoint || _testUtils.generateEndpoint();
-        workerOptions = workerOptions || _createWorkerOptions();
-        return new ParanoidPirateQueue(feEndpoint, beEndpoint, workerOptions);
+        queueOptions = _ensureQueueOptions(queueOptions);
+        return new ParanoidPirateQueue(feEndpoint, beEndpoint, queueOptions);
     }
 
     function _createReqSocket(id) {
@@ -214,10 +213,10 @@ describe('ParanoidPirateQueue', function() {
             expect(createQueue({})).to.throw(error);
         });
 
-        it('should throw an error if valid worker options are not specified', function() {
+        it('should throw an error if valid queue options are not specified', function() {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            var error = 'invalid worker options specified (arg #3)';
+            var error = 'invalid queue options specified (arg #3)';
 
             function createQueue(options) {
                 return function() {
@@ -231,10 +230,10 @@ describe('ParanoidPirateQueue', function() {
             expect(createQueue(true)).to.throw(error);
         });
 
-        it('should throw an error if the worker options does not include a poll frequency', function() {
+        it('should throw an error if the queue options does not include a poll frequency', function() {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            var error = 'worker options does not define a poll frequency property (workerOptions.pollFrequency)';
+            var error = 'queue options does not define a poll frequency property (queueOptions.pollFrequency)';
 
             function createQueue(pollFrequency) {
                 var options = { pollFrequency: pollFrequency};
@@ -252,13 +251,34 @@ describe('ParanoidPirateQueue', function() {
             expect(createQueue({})).to.throw(error);
         });
 
-        it('should throw an error if the worker options does not include a worker timeout', function() {
+        it('should throw an error if the queue options does not include a worker timeout', function() {
             var feEndpoint = _testUtils.generateEndpoint();
             var beEndpoint = _testUtils.generateEndpoint();
-            var error = 'worker options does not define a worker timeout property (workerOptions.workerTimeout)';
+            var error = 'queue options does not define a worker timeout property (queueOptions.workerTimeout)';
 
             function createQueue(workerTimeout) {
                 var options = { pollFrequency: 1000, workerTimeout: workerTimeout};
+                return function() {
+                    return new ParanoidPirateQueue(feEndpoint, beEndpoint, options);
+                };
+            }
+            expect(createQueue()).to.throw(error);
+            expect(createQueue(null)).to.throw(error);
+            expect(createQueue('abc')).to.throw(error);
+            expect(createQueue(0)).to.throw(error);
+            expect(createQueue(-1)).to.throw(error);
+            expect(createQueue(true)).to.throw(error);
+            expect(createQueue([])).to.throw(error);
+            expect(createQueue({})).to.throw(error);
+        });
+
+        it('should throw an error if the queue options does not include a request timeout', function() {
+            var feEndpoint = _testUtils.generateEndpoint();
+            var beEndpoint = _testUtils.generateEndpoint();
+            var error = 'queue options does not define a request timeout property (queueOptions.requestTimeout)';
+
+            function createQueue(requestTimeout) {
+                var options = { pollFrequency: 1000, workerTimeout: 3000, requestTimeout: requestTimeout};
                 return function() {
                     return new ParanoidPirateQueue(feEndpoint, beEndpoint, options);
                 };
@@ -949,6 +969,36 @@ describe('ParanoidPirateQueue', function() {
                 .then(sendMessagesFromClients('message #1', 'message #2'))
 
                 .then(doTests)
+                .then(_getSuccessCallback(done), _getFailureCallback(done));
+        });
+
+        xit('should discard requests that have not been processed within the configured request timeout', function(done) {
+            var clientCount = 3;
+            var clientMessage = 'MESSAGE';
+            var requestTimeout = 300;
+            var feEndpoint = _testUtils.generateEndpoint();
+            _queue = _createQueue(feEndpoint, null, {
+                pollFrequency: 100,
+                workerTimeout: 2000,
+                requestTimeout: requestTimeout
+            });
+
+            var checkRequestCount = function(count) {
+                return function(sockets) {
+                    expect(_queue.getPendingRequestCount()).to.equal(count);
+                    return sockets;
+                };
+            }
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_wait())
+                
+                .then(checkRequestCount(clientCount))
+                .then(_wait(requestTimeout * 1.5))
+
+                .then(checkRequestCount(0))
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
