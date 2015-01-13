@@ -1,4 +1,5 @@
 /* jshint node:true, expr:true */
+/* global xit: false */
 'use strict';
 
 var _events = require('events');
@@ -68,7 +69,7 @@ describe('ParanoidPirateQueue', function() {
     }
 
     function _ensureQueueOptions(options) {
-        var options = options || {};
+        options = options || {};
         options.pollFrequency = options.pollFrequency || 1000;
         options.workerTimeout = options.workerTimeout || 3000;
         options.requestTimeout = options.requestTimeout || 3000;
@@ -1757,7 +1758,7 @@ describe('ParanoidPirateQueue', function() {
                     return function() {
                         counts[setName]++;
                     };
-                };
+                }
 
                 var doTests = function() {
                     expect(_queue.getPendingRequestCount()).to.equal(clientCount);
