@@ -189,7 +189,7 @@ module.exports = function(grunt) {
      *  - Cleaning up build results
      */
     grunt.registerTask('default', [ 'jsbeautifier:dev',
-                                    'jshint:dev',
+                                    //'jshint:dev', //TODO: Keeping this here causes the task to break (segmentation fault). Needs review.
                                     'test:unit',
                                     'clean' ]);
 
