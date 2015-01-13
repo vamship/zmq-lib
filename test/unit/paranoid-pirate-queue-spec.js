@@ -1384,6 +1384,15 @@ describe('ParanoidPirateQueue', function() {
                 return workerMap;
             }
 
+            function _unblockWorkers(workerMap) {
+                return function(data) {
+                    workerMap._workerList.forEach(function(worker) {
+                        worker.unblock();
+                    });
+                    return data;
+                };
+            }
+
             it('should distribute requests from one client to multiple workers when session has not been enabled', function(done) {
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
@@ -1691,12 +1700,6 @@ describe('ParanoidPirateQueue', function() {
                     ]);
                 };
 
-                var unblockWorkers = function(sockets) {
-                    workerMap._workerList.forEach(function(worker) {
-                        worker.unblock();
-                    });
-                };
-
                 expect(_queue.initialize()).to.be.fulfilled
                     .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
                     .then(_captureContext('client'))
@@ -1723,7 +1726,7 @@ describe('ParanoidPirateQueue', function() {
                     .then(_wait())
 
                     //Unblock the workers
-                    .then(unblockWorkers)
+                    .then(_unblockWorkers(workerMap))
                     .then(_wait())
 
                     .then(doTests)
@@ -1895,17 +1898,13 @@ describe('ParanoidPirateQueue', function() {
                     return sockets;
                 };
 
-                var checkAndUnblockWorkers = function() {
+                var checkRequestCount = function() {
                     var workerInfo = _queue.getWorkerMap();
                     var workerId = Object.keys(workerInfo)[0];
                     var worker = workerInfo[workerId];
 
                     expect(_queue.getPendingRequestCount()).to.equal(clientIds.length - 1);
                     expect(worker.pendingRequestCount).to.equal(clientIds.length - 1);
-
-                    workerMap._workerList.forEach(function(worker) {
-                        worker.unblock();
-                    });
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
@@ -1923,10 +1922,65 @@ describe('ParanoidPirateQueue', function() {
                     .then(checkStateAndSendMessages)
                     .then(_wait())
 
-                    .then(checkAndUnblockWorkers)
+                    .then(checkRequestCount)
+                    .then(_unblockWorkers(workerMap))
                     .then(_wait())
 
                     .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should show the correct number of available workers when a session bound client sends a new request', function(done) {
+                var clientCount = 3;
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1', 'worker2', 'worker3' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                function checkAvailableWorkers(count) {
+                    return function(data) {
+                        expect(_queue.getAvailableWorkerCount()).to.equal(count);
+                        return data;
+                    };
+                }
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_captureContext('worker'))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
+                    .then(_captureContext('client'))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'block'],
+                                                   [clientIds[0], 'block'],
+                                                   [clientIds[0], 'block']))
+                    .then(_wait())
+
+                    .then(checkAvailableWorkers(0))
+                    .then(_switchContext('worker'))
+                    .then(_unblockWorkers(workerMap))
+                    .then(_wait())
+
+                    .then(checkAvailableWorkers(workerIds.length))
+
+                    .then(_switchContext('client'))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'block'],
+                                                   [clientIds[0], 'block'],
+                                                   [clientIds[0], 'block']))
+                    .then(_wait())
+
+                    .then(checkAvailableWorkers(0))
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
