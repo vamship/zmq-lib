@@ -131,7 +131,7 @@ describe('ParanoidPirateQueue', function() {
             for(var index=1; index<=count; index++) {
                 var def = _q.defer();
                 var id = setIds? _uuid.v4():null;
-                var socket = (type === 'client')? _createReqSocket(id):
+                var socket = (type === 'req')? _createReqSocket(id):
                                                   _createDealerSocket(id);
 
                 socket.connect(endpoint);
@@ -442,7 +442,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -478,7 +478,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
@@ -512,7 +512,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -578,7 +578,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
@@ -596,7 +596,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -619,7 +619,7 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -645,11 +645,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
@@ -675,11 +675,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -721,12 +721,12 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_setupSocketHandlers('message', workerMessageHandler))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
@@ -755,7 +755,7 @@ describe('ParanoidPirateQueue', function() {
             });
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
                 .then(_captureContext('client'))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_waitForResolution(def))
@@ -785,11 +785,11 @@ describe('ParanoidPirateQueue', function() {
             });
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
                 .then(_captureContext('worker'))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
                 .then(_captureContext('client'))
                 .then(_sendMessagesOverSockets(clientMessage))
 
@@ -822,11 +822,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
                 .then(_setupSocketHandlers('message', workerMessageHandler))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
                 .then(_captureContext('client'))
                 .then(_sendMessagesOverSockets(clientMessage))
 
@@ -848,11 +848,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
@@ -874,11 +874,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
 
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                 .then(_wait())
 
@@ -904,11 +904,11 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', 1, beEndpoint, true))
+                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
                 .then(_setupSocketHandlers('message', workerMessageHandler))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('client', 1, feEndpoint, true))
+                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
                 .then(_sendMessagesOverSockets(clientMessage))
 
                 .then(_waitForResolution(def))
@@ -961,11 +961,11 @@ describe('ParanoidPirateQueue', function() {
             }
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                 .then(_setupSocketHandlers('message', workerMessageHandler))
                 .then(_sendMessagesOverSockets(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(sendMessagesFromClients('message #1', 'message #2'))
 
                 .then(doTests)
@@ -991,7 +991,7 @@ describe('ParanoidPirateQueue', function() {
             }
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                 .then(_sendMessagesOverSockets(clientMessage))
                 .then(_wait())
                 
@@ -1025,7 +1025,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1059,7 +1059,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1114,13 +1114,13 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMessageHandler))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
                     .then(saveInitialWorkerMap)
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets('message #1', 'message #2'))
                     .then(_waitForResolution(def))
 
@@ -1155,7 +1155,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMessageHandler))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
@@ -1177,7 +1177,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1207,12 +1207,12 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_captureContext('worker'))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
@@ -1239,11 +1239,11 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1280,7 +1280,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1320,19 +1320,19 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint, true))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint, true))
                     .then(_setupSocketHandlers('message', expiredWorkerHandler))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait(pollFrequency * 4))
 
                     .then(verifyWorkerCount)
 
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_setupSocketHandlers('message', validWorkerHandler))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', workerCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', workerCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
@@ -1400,19 +1400,19 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 var sendMessagesInReverseOrder = function(sockets) {
-                    sockets[1].send([clientIds[1], 'block']);
-                    sockets[0].send([clientIds[0], 'no-block']);
+                    sockets[1].send(clientIds[1]);
+                    sockets[0].send(clientIds[0]);
                     return sockets;
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'], [clientIds[1], 'no-block']))
+                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientIds[0], clientIds[1]))
                     .then(_wait())
 
                     // Send messages in reverse order, so that they are distributed across workers.
@@ -1450,7 +1450,7 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
@@ -1488,11 +1488,11 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
@@ -1543,13 +1543,13 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
                     .then(testForUnassignedSessions)
 
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
@@ -1557,7 +1557,7 @@ describe('ParanoidPirateQueue', function() {
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            it('should route all requests from a specific client to a specific worker once session has been established', function(done) {
+            it('should route all requests based on established session affinity (workers connect first)', function(done) {
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
                 _queue = _createQueue(feEndpoint, beEndpoint, {
@@ -1569,31 +1569,36 @@ describe('ParanoidPirateQueue', function() {
                 });
 
                 var workerIds = [ 'worker1', 'worker2' ];
-                var clientIds = [ 'client1', 'client2' ];
+                var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
                 var workerMap = _initializeWorkers(workerIds);
 
                 var doTests = function() {
                     var workerList = workerMap._workerList;
                     
-                    expect(workerList[0].messages).to.deep.equal([clientIds[0], clientIds[0]]);
-                    expect(workerList[1].messages).to.deep.equal([clientIds[1], clientIds[1]]);
+                    for(var index=0; index<workerIds.length; index++) {
+                        expect(workerList[index].messages).to.deep.equal([
+                            clientIds[index], clientIds[index + 2],
+                            clientIds[index + 2], clientIds[index]
+                        ]);
+                    }
                 };
 
                 var sendMessagesInReverseOrder = function(sockets) {
-                    sockets[1].send([clientIds[1], 'no-block']);
-                    sockets[0].send([clientIds[0], 'no-block']);
+                    for(var index=clientIds.length-1; index>=0; index--) {
+                        sockets[index].send(clientIds[index]);
+                    }
                     return sockets;
                 };
 
-
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'], [clientIds[1], 'no-block']))
+                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientIds[0], clientIds[1],
+                                                   clientIds[2], clientIds[3]))
                     .then(_wait())
 
                     // Send messages in reverse order, but expect session affinity to be honored
@@ -1604,7 +1609,7 @@ describe('ParanoidPirateQueue', function() {
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            it('should enqueue a request on a worker specific queue if the session worker is not available', function(done) {
+            it('should route all requests based on established session affinity (clients connect first)', function(done) {
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
                 _queue = _createQueue(feEndpoint, beEndpoint, {
@@ -1616,112 +1621,49 @@ describe('ParanoidPirateQueue', function() {
                 });
 
                 var workerIds = [ 'worker1', 'worker2' ];
-                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
                 var workerMap = _initializeWorkers(workerIds);
 
                 var doTests = function() {
-                    var workers = _getContext('worker');
                     var workerList = workerMap._workerList;
-
-
-                    var firstWorkerId = (new Buffer(workers[0].identity)).toString('base64');
-                    var secondWorkerId = (new Buffer(workers[1].identity)).toString('base64');
-
-                    var map = _queue.getWorkerMap();
-                    var firstWorker = map[firstWorkerId];
-                    var secondWorker = map[secondWorkerId];
-
-                    expect(firstWorker.pendingRequestCount).to.equal(1);
-                    expect(secondWorker.pendingRequestCount).to.equal(0);
-                    expect(workerList[0].messages).to.deep.equal([clientIds[0], clientIds[2]]);
-                    expect(workerList[1].messages).to.deep.equal([clientIds[1], clientIds[1]]);
+                    
+                    for(var index=0; index<workerIds.length; index++) {
+                        expect(workerList[index].messages).to.deep.equal([
+                            clientIds[index], clientIds[index + 2],
+                            clientIds[index + 2], clientIds[index]
+                        ]);
+                    }
                 };
 
                 var sendMessagesInReverseOrder = function(sockets) {
-                    sockets[1].send([clientIds[1], 'no-block']);
-                    sockets[0].send([clientIds[0], 'no-block']);
+                    for(var index=clientIds.length-1; index>=0; index--) {
+                        sockets[index].send(['', clientIds[index]]);
+                    }
                     return sockets;
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
-                    .then(_captureContext('worker'))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_createAndConnectSockets('dealer', clientIds.length, feEndpoint))
                     .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
-                                                   [clientIds[1], 'no-block'],
-                                                   [clientIds[2], 'block']))
+                    .then(_sendMessagesOverSockets(['', clientIds[0]], ['', clientIds[1]],
+                                                   ['', clientIds[2]], ['', clientIds[3]]))
                     .then(_wait())
 
-                    //Create a few dummy workers that should never receive requests because
-                    //all clients already have sessions created.
-                    .then(_createAndConnectSockets('worker', 3, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
-
-                    // Send messages for clients #1, and #2 to build up pending message
-                    // count
+                    // Send messages in reverse order, but expect session affinity to be honored
                     .then(_switchContext('client'))
                     .then(sendMessagesInReverseOrder)
                     .then(_wait())
 
-                    .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
-            });
-
-            it('should show the correct number of pending requests even when a request is added to a worker queue', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
-                    pollFrequency: 5000,
-                    workerTimeout: 10000,
-                    session: {
-                        timeout: 30000
-                    }
-                });
-
-                var workerIds = [ 'worker1' ];
-                var clientIds = [ 'client1', 'client2', 'client3' ];
-                var workerMap = _initializeWorkers(workerIds);
-
-                var doTests = function() {
-                    expect(_queue.getPendingRequestCount()).to.equal(clientIds.length - 1);
-                };
-
-                var checkStateAndSendMessages = function(sockets) {
-                    expect(_queue.getPendingRequestCount()).to.equal(0);
-
-                    sockets[1].send([clientIds[1], 'no-block']);
-                    sockets[0].send([clientIds[0], 'no-block']);
-                    return sockets;
-                };
-
-                expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
-                                                   [clientIds[1], 'no-block'],
-                                                   [clientIds[2], 'block']))
-                    .then(_wait())
-
-                    // Send messages for clients #1, and #2 to build up pending message
-                    // count
-                    .then(checkStateAndSendMessages)
-                    .then(_wait(500))
-
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
 
-            it('should look in the worker specific queue for requests before looking in the common queue', function(done) {
+            it('should process requests in order, without giving preferential treatment to clients with sessions', function(done) {
                 var feEndpoint = _testUtils.generateEndpoint();
                 var beEndpoint = _testUtils.generateEndpoint();
                 var clientMessage = 'MESSAGE';
@@ -1742,6 +1684,7 @@ describe('ParanoidPirateQueue', function() {
 
                     expect(workerList[0].messages).to.deep.equal([
                         clientIds[0], clientIds[1], clientIds[2],
+                        clientMessage, clientMessage, clientMessage,
                         clientIds[0], clientIds[1], clientIds[2]
                     ]);
                 };
@@ -1753,32 +1696,232 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('client', clientIds.length, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
                     .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
-                                                   [clientIds[1], 'no-block'],
+                    .then(_sendMessagesOverSockets(clientIds[0],
+                                                   clientIds[1],
                                                    [clientIds[2], 'block']))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint, true))
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
                     .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
+                    //Create dummy clients whose messages should be processed in order
+                    .then(_createAndConnectSockets('req', 3, feEndpoint))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
                     //Send some requests to get queued.
                     .then(_switchContext('client'))
+                    .then(_sendMessagesOverSockets(clientIds[0],
+                                                   clientIds[1],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    //Unblock the workers
+                    .then(unblockWorkers)
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should assign a request to the session defined worker, even if the worker has died', function(done) {
+                var clientCount = 3;
+                var clientMessage = 'MESSAGE';
+                var pollFrequency = 100;
+                var workerTimeout = 300;
+                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtils.generateEndpoint();
+
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: pollFrequency,
+                    workerTimeout: workerTimeout,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1', 'worker2', 'worker3' ];
+                var firstWorkerMap = _initializeWorkers(workerIds);
+                var secondWorkerMap = _initializeWorkers(workerIds);
+
+                var counts = {
+                    first: 0,
+                    second: 0
+                };
+
+                function createMessageHandler(setName) {
+                    return function() {
+                        counts[setName]++;
+                    };
+                };
+
+                var doTests = function() {
+                    expect(_queue.getPendingRequestCount()).to.equal(clientCount);
+                    expect(counts.first).to.equal(clientCount);
+                    expect(counts.second).to.equal(clientCount);
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('dealer', firstWorkerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', firstWorkerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
+                    .then(_captureContext('client'))
+                    .then(_setupSocketHandlers('message', createMessageHandler('first')))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait(pollFrequency * 4))
+
+                    // Create a second set of workers and clients, but the new workers 
+                    // should not touch messages from the previous clients, even though
+                    // the workers for those clients have died.
+                    .then(_createAndConnectSockets('dealer', secondWorkerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', secondWorkerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_switchContext('client'))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
+                    .then(_setupSocketHandlers('message', createMessageHandler('second')))
+                    .then(_sendMessagesOverSockets(clientMessage))
+                    .then(_wait())
+
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should show the correct number of pending requests when a request is assigned to a worker', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    var workerInfo = _queue.getWorkerMap();
+                    var workerId = Object.keys(workerInfo)[0];
+                    var worker = workerInfo[workerId];
+
+                    expect(worker.pendingRequestCount).to.equal(clientIds.length - 1);
+                    expect(_queue.getPendingRequestCount()).to.equal(clientIds.length - 1);
+                };
+
+                var checkStateAndSendMessages = function(sockets) {
+                    var workerInfo = _queue.getWorkerMap();
+                    var workerId = Object.keys(workerInfo)[0];
+                    var worker = workerInfo[workerId];
+
+                    expect(worker.pendingRequestCount).to.equal(0);
+                    expect(_queue.getPendingRequestCount()).to.equal(0);
+
+                    sockets[1].send([clientIds[1], 'no-block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
                     .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
                                                    [clientIds[1], 'no-block'],
                                                    [clientIds[2], 'block']))
                     .then(_wait())
 
-                    //Create dummy clients whose messages should never be processed
-                    .then(_createAndConnectSockets('client', 3, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
+                    // Send messages for clients #1, and #2 to build up pending message
+                    // count
+                    .then(checkStateAndSendMessages)
                     .then(_wait())
 
-                    //Unblock the workers
-                    .then(unblockWorkers)
+                    .then(doTests)
+                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+            });
+
+            it('should show the correct number of pending requests when a worker picks up an enqueued request', function(done) {
+                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtils.generateEndpoint();
+                _queue = _createQueue(feEndpoint, beEndpoint, {
+                    pollFrequency: 5000,
+                    workerTimeout: 10000,
+                    session: {
+                        timeout: 30000
+                    }
+                });
+
+                var workerIds = [ 'worker1' ];
+                var clientIds = [ 'client1', 'client2', 'client3' ];
+                var workerMap = _initializeWorkers(workerIds);
+
+                var doTests = function() {
+                    var workerInfo = _queue.getWorkerMap();
+                    var workerId = Object.keys(workerInfo)[0];
+                    var worker = workerInfo[workerId];
+
+                    expect(worker.pendingRequestCount).to.equal(0);
+                    expect(_queue.getPendingRequestCount()).to.equal(0);
+                };
+
+                var checkStateAndSendMessages = function(sockets) {
+                    var workerInfo = _queue.getWorkerMap();
+                    var workerId = Object.keys(workerInfo)[0];
+                    var worker = workerInfo[workerId];
+
+                    expect(worker.pendingRequestCount).to.equal(0);
+                    expect(_queue.getPendingRequestCount()).to.equal(0);
+
+                    sockets[1].send([clientIds[1], 'no-block']);
+                    sockets[0].send([clientIds[0], 'no-block']);
+                    return sockets;
+                };
+
+                var checkAndUnblockWorkers = function() {
+                    var workerInfo = _queue.getWorkerMap();
+                    var workerId = Object.keys(workerInfo)[0];
+                    var worker = workerInfo[workerId];
+
+                    expect(_queue.getPendingRequestCount()).to.equal(clientIds.length - 1);
+                    expect(worker.pendingRequestCount).to.equal(clientIds.length - 1);
+
+                    workerMap._workerList.forEach(function(worker) {
+                        worker.unblock();
+                    });
+                };
+
+                expect(_queue.initialize()).to.be.fulfilled
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
+                    .then(_setupSocketHandlers('message', workerMap._handlers))
+                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                    .then(_wait())
+
+                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
+                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                                                   [clientIds[1], 'no-block'],
+                                                   [clientIds[2], 'block']))
+                    .then(_wait())
+
+                    .then(checkStateAndSendMessages)
+                    .then(_wait())
+
+                    .then(checkAndUnblockWorkers)
                     .then(_wait())
 
                     .then(doTests)
@@ -1821,12 +1964,12 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerMap._count, beEndpoint))
+                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
                     .then(_setupSocketHandlers('message', workerMap._handlers))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
 
@@ -1871,11 +2014,11 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('worker', workerCount, beEndpoint, true))
+                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint, true))
                     .then(_sendMessagesOverSockets(_messageDefinitions.READY))
                     .then(_wait())
 
-                    .then(_createAndConnectSockets('client', clientCount, feEndpoint))
+                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
                     .then(_captureContext('client'))
                     .then(_sendMessagesOverSockets(clientMessage))
                     .then(_wait())
@@ -1886,6 +2029,7 @@ describe('ParanoidPirateQueue', function() {
                     .then(doTests)
                     .then(_getSuccessCallback(done), _getFailureCallback(done));
             });
+
         });
     });
 });
