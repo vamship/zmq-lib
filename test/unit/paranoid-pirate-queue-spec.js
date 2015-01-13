@@ -973,10 +973,11 @@ describe('ParanoidPirateQueue', function() {
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
-        xit('should discard requests that have not been processed within the configured request timeout', function(done) {
+        it('should discard requests that have not been processed within the configured request timeout', function(done) {
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
             var requestTimeout = 300;
+            var pollFrequency = 100;
             var feEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, null, {
                 pollFrequency: 100,
@@ -997,7 +998,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_wait())
                 
                 .then(checkRequestCount(clientCount))
-                .then(_wait(requestTimeout * 1.5))
+                .then(_wait(pollFrequency * 4))
 
                 .then(checkRequestCount(0))
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
