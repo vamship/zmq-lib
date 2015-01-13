@@ -487,7 +487,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
-        it('should return a map with an entry for every client that connects, if session affinity has been enabled', function(done) {
+        it('should return a map with an entry for every client that connects, if session has been enabled', function(done) {
             var clientCount = 10;
             var feEndpoint = _testUtils.generateEndpoint();
             _queue = _createQueue(feEndpoint, null, {
@@ -658,7 +658,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
-        it('should show workers as being unavailable once a request has been assigned to them (worker connects after client)', function(done){
+        it('should show workers as being unavailable once a request has been assigned to them (worker connects second)', function(done){
             var workerCount = 3;
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
@@ -688,7 +688,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_getSuccessCallback(done), _getFailureCallback(done));
         });
 
-        it('should show workers as being available once they respond to a request, and no other requests are pending', function(done){
+        it('should show workers as being available once they respond to a request, with no pending requests', function(done){
             var workerCount = 3;
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
