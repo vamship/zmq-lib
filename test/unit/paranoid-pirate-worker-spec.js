@@ -403,7 +403,7 @@ describe('ParanoidPirateWorker', function(){
                         if(heartBeatCount > MAX_HEART_BEATS) {
                             _testUtils.runDeferred(function() {
                                 var averageHBFrequency = aggregatePeriod/MAX_HEART_BEATS;
-                                var range = _getRange(RETRY_FREQUENCY, 3);
+                                var range = _getRange(RETRY_FREQUENCY, 5);
                                 expect(receivedReady).to.be.true;
                                 expect(averageHBFrequency).to.be.within(range[0], range[1]);
                             }, def);
@@ -465,7 +465,7 @@ describe('ParanoidPirateWorker', function(){
                 if(wasDisconnected) {
                     _testUtils.runDeferred(function() {
                         var timeTaken = Date.now() - startTime;
-                        var range = _getRange(backoffDuration, 3);
+                        var range = _getRange(backoffDuration, 5);
                         expect(timeTaken).to.be.within(range[0], range[1]);
                     }, def);
                 }
@@ -506,13 +506,13 @@ describe('ParanoidPirateWorker', function(){
 
                     if(backoffRetries === 0) {
                         _testUtils.runDeferred(function() {
-                            var range = _getRange(backoffDuration, 10);
+                            var range = _getRange(backoffDuration, 15);
                             expect(retryDurations[0]).to.be.within(range[0], range[1]);
 
-                            range = _getRange(backoffDuration * 2, 10);
+                            range = _getRange(backoffDuration * 2, 15);
                             expect(retryDurations[1]).to.be.within(range[0], range[1]);
 
-                            range = _getRange(backoffDuration * 4, 10);
+                            range = _getRange(backoffDuration * 4, 15);
                             expect(retryDurations[2]).to.be.within(range[0], range[1]);
                         }, def);
                     }
