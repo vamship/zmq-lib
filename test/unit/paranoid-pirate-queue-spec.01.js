@@ -596,6 +596,24 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
+        it('should drop messages from workers that have not yet registered', function(done) {
+            var workerCount = 3;
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
+
+            var doTests = function() {
+                expect(_queue.getAvailableWorkerCount()).to.equal(0);
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages('foo'))
+                .then(_queueUtil.wait())
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
         it('should raise the "REQUEST" event when a request is received from the client', function(done){
             var clientMessage = 'MESSAGE';
             var feEndpoint = _testUtil.generateEndpoint();
