@@ -6,6 +6,31 @@ var _uuid = require('node-uuid');
 var _q = require('q');
 
 module.exports = {
+
+    /**
+     * Generates a callback that resolves done() without any errors.
+     *
+     * @param {Function} done Async test complete signaller
+     * @return {Function} A callback that can be used to resolve done()
+     */
+    getSuccessCallback: function(done) {
+        return function(){
+            done();
+        }
+    },
+
+    /**
+     * Generates a callback that rejects done() without any errors.
+     *
+     * @param {Function} done Async test complete signaller
+     * @return {Function} A callback that can be used to reject done()
+     */
+    getFailureCallback: function(done) {
+        return function(err) {
+            done(err);
+        }
+    },
+
     /**
      * Generates a random endpoint for sockets under test. The endpoints are
      * ipc endpoints (with prefix ipc://), with a random string for the

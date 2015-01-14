@@ -12,7 +12,8 @@ _chai.use(require('sinon-chai'));
 _chai.use(require('chai-as-promised'));
 
 var expect = _chai.expect;
-var _testUtils = require('../test-util');
+var _testUtil = require('../test-util');
+var _queueUtil = require('../queue-util');
 
 var ParanoidPirateQueue = require('../../lib/paranoid-pirate-queue');
 var _messageDefinitions = require('../../lib/message-definitions');
@@ -20,161 +21,18 @@ var _eventDefinitions = require('../../lib/event-definitions');
 
 
 describe('ParanoidPirateQueue', function() {
-    var DEFAULT_DELAY = 10;
     var _queue;
-    var _sockets;
-    var _context;
 
-    beforeEach(function(){
-        _sockets = [];
-        _context = {};
+    beforeEach(function() {
+        _queueUtil.setup();
     })
 
-    afterEach(function(){
+    afterEach(function() {
         if(_queue) {
             _queue.dispose();
         }
-        _sockets.forEach(function(sock){
-            sock.close();
-        });
+        _queueUtil.teardown();
     });
-
-    function _getSuccessCallback(done) {
-        return function(){
-            done();
-        }
-    }
-
-    function _getFailureCallback(done) {
-        return function(err) {
-            done(err);
-        }
-    }
-
-    function _captureContext(key) {
-        return function(data) {
-            _context[key] = data;
-            return data;
-        };
-    }
-
-    function _getContext(key) {
-        return _context[key];
-    }
-
-    function _switchContext(key) {
-        return function() {
-            return _context[key];
-        }
-    }
-
-    function _ensureQueueOptions(options) {
-        options = options || {};
-        options.pollFrequency = options.pollFrequency || 1000;
-        options.workerTimeout = options.workerTimeout || 3000;
-        options.requestTimeout = options.requestTimeout || 3000;
-
-        return options;
-    }
-
-    function _createQueue(feEndpoint, beEndpoint, queueOptions) {
-        feEndpoint = feEndpoint || _testUtils.generateEndpoint();
-        beEndpoint = beEndpoint || _testUtils.generateEndpoint();
-        queueOptions = _ensureQueueOptions(queueOptions);
-        return new ParanoidPirateQueue(feEndpoint, beEndpoint, queueOptions);
-    }
-
-    function _createReqSocket(id) {
-        var socket =  _zmq.createSocket('req');
-        if(id) {
-            socket.identity = id;
-        }
-        socket.monitor(10);
-        _sockets.push(socket);
-        
-        return socket;
-    }
-
-    function _createDealerSocket(id) {
-        var socket =  _zmq.createSocket('dealer');
-        if(id) {
-            socket.identity = id;
-        }
-        socket.monitor(10);
-        _sockets.push(socket);
-        
-        return socket;
-    }
-
-    function _getResolver(def, socket) {
-        return function() {
-           def.resolve(socket); 
-        };
-    }
-
-    function _wait(delay) {
-        delay = delay || DEFAULT_DELAY;
-        return _testUtils.getDelayedRunner(function(data) {
-            return data;
-        }, delay);
-    }
-
-    function _waitForResolution(def) {
-        return function() {
-            return def.promise;
-        };
-    }
-
-    function _createAndConnectSockets(type, count, endpoint, setIds) {
-        return function() {
-            var promises = [];
-
-            for(var index=1; index<=count; index++) {
-                var def = _q.defer();
-                var id = setIds? _uuid.v4():null;
-                var socket = (type === 'req')? _createReqSocket(id):
-                                                  _createDealerSocket(id);
-
-                socket.connect(endpoint);
-                socket.on('connect', _getResolver(def, socket));
-
-                promises.push(def.promise);
-            }
-            return _q.all(promises);
-        };
-    }
-
-    function _sendMessagesOverSockets() {
-        var messages = Array.prototype.splice.call(arguments, 0);
-        return function(sockets) {
-            var messageIndex = 0;
-            sockets.forEach(function(socket) {
-                var message = messages[messageIndex];
-                messageIndex = (messageIndex + 1) % messages.length;
-
-                socket.send(message);
-            });
-
-            return sockets;
-        };
-    }
-
-    function _setupSocketHandlers(event, handlers) {
-        if(! (handlers instanceof Array)) {
-            handlers = [ handlers ];
-        }
-        return function(sockets) {
-            var handlerIndex = 0;
-            sockets.forEach(function(socket) {
-                var handler = handlers[handlerIndex];
-                handlerIndex = (handlerIndex + 1) % handlers.length;
-
-                socket.on(event, handler.bind(socket));
-            });
-
-            return sockets;
-        };
-    }
 
     describe('ctor()', function() {
         it('should throw an error if invoked with an invalid front end endpoint', function() {
@@ -196,7 +54,7 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should throw an error if invoked with an invalid back end endpoint', function() {
-            var feEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
             var error = 'invalid back end endpoint specified (arg #2)';
 
             function createQueue(beEndpoint) {
@@ -215,8 +73,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should throw an error if valid queue options are not specified', function() {
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var error = 'invalid queue options specified (arg #3)';
 
             function createQueue(options) {
@@ -232,8 +90,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should throw an error if the queue options does not include a poll frequency', function() {
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var error = 'queue options does not define a poll frequency property (queueOptions.pollFrequency)';
 
             function createQueue(pollFrequency) {
@@ -253,8 +111,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should throw an error if the queue options does not include a worker timeout', function() {
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var error = 'queue options does not define a worker timeout property (queueOptions.workerTimeout)';
 
             function createQueue(workerTimeout) {
@@ -274,8 +132,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should throw an error if the queue options does not include a request timeout', function() {
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var error = 'queue options does not define a request timeout property (queueOptions.requestTimeout)';
 
             function createQueue(requestTimeout) {
@@ -295,7 +153,7 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should create an object that exposes members required by the interface', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue).to.be.an.instanceof(_events.EventEmitter);
             expect(_queue).to.have.property('initialize').and.to.be.a('function');
@@ -308,7 +166,7 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should initialize properties to default values', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.getPendingRequestCount()).to.equal(0);
             expect(_queue.getAvailableWorkerCount()).to.equal(0);
@@ -320,7 +178,7 @@ describe('ParanoidPirateQueue', function() {
 
     describe('initialize()', function() {
         it('should return a promise when invoked', function(){
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             var ret = _queue.initialize();
             expect(ret).to.be.an('object');
@@ -328,56 +186,56 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should reject the promise if the front end binding fails', function(done) {
-            _queue = _createQueue('bad-endpoint');
+            _queue = _queueUtil.createPPQueue('bad-endpoint');
             
             expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should reject the promise if the back end binding fails', function(done){
-            _queue = _createQueue(null, 'bad-endpoint');
+            _queue = _queueUtil.createPPQueue(null, 'bad-endpoint');
 
             expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should reject the promise if both front and back end binrings fail', function(done){
-            _queue = _createQueue('bad-endpoint', 'bad-endpoint');
+            _queue = _queueUtil.createPPQueue('bad-endpoint', 'bad-endpoint');
 
             expect(_queue.initialize()).to.be.rejected.notify(done);
         });
 
         it('should resolve the promise once both front and back ends have been bound successfully', function(done){
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.initialize()).to.be.fulfilled.notify(done);
         });
 
         it('should set isReady()=true when initialization succeeds', function(done) {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.isReady()).to.be.false;
 
             expect(_queue.initialize()).to.be.fulfilled.then(function() {
                 expect(_queue.isReady()).to.be.true;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should set isReady()=false when initialization fails', function(done) {
-            _queue = _createQueue('bad-endpoint', 'bad-endpoint');
+            _queue = _queueUtil.createPPQueue('bad-endpoint', 'bad-endpoint');
 
             expect(_queue.isReady()).to.be.false;
 
             expect(_queue.initialize()).to.be.rejected.then(function() {
                 expect(_queue.isReady()).to.be.false;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should open a front end socket and bind to the endpoint when invoked', function(done) {
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint);
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var def = _q.defer();
-                var client1 = _createReqSocket();
+                var client1 = _queueUtil.createReqSocket();
 
                 client1.on('connect', function(){
                     def.resolve();
@@ -385,16 +243,16 @@ describe('ParanoidPirateQueue', function() {
                 client1.connect(feEndpoint);
 
                 return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should open a back end socket and bind to the endpoint when invoked', function(done) {
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(beEndpoint);
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(beEndpoint);
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var def = _q.defer();
-                var worker = _createDealerSocket();
+                var worker = _queueUtil.createDealerSocket();
 
                 worker.on('connect', function(){
                     def.resolve();
@@ -402,19 +260,19 @@ describe('ParanoidPirateQueue', function() {
                 worker.connect(beEndpoint);
 
                 return def.promise;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
     });
 
     describe('getWorkerMap()', function() {
         it('should return an empty object when no workers have connected', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.getWorkerMap()).to.deep.equal({});
         });
 
         it('should return a copy of the map, and not a reference', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             var map = _queue.getWorkerMap();
             expect(map).to.deep.equal({});
@@ -423,8 +281,8 @@ describe('ParanoidPirateQueue', function() {
 
         it('should return a map with an entry for every worker that connects', function(done) {
             var workerCount = 10;
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(null, beEndpoint);
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
 
             var doTests = function() {
                 var map = _queue.getWorkerMap();
@@ -443,24 +301,24 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
     });
 
     describe('getSessionMap()', function() {
         it('should return an empty object when no clients have connected', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.getSessionMap()).to.deep.equal({});
         });
 
         it('should return a copy of the map, and not a reference', function() {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             var map = _queue.getSessionMap();
             expect(map).to.deep.equal({});
@@ -470,8 +328,8 @@ describe('ParanoidPirateQueue', function() {
         it('should return an empty object if session affinity is not enabled, even if clients have connected', function(done) {
             var clientCount = 10;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint);
 
             var doTests = function() {
                 var map = _queue.getSessionMap();
@@ -479,18 +337,18 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should return a map with an entry for every client that connects, if session has been enabled', function(done) {
             var clientCount = 10;
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, null, {
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, null, {
                 pollFrequency: 3000,
                 workerTimeout: 9000,
                 session: {
@@ -513,29 +371,29 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
     });
 
     describe('dispose()', function() {
         it('should return a promise when invoked', function(done) {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 var ret = _queue.dispose();
 
                 expect(ret).to.be.an('object');
                 expect(ret).to.have.property('then').and.to.be.a('function');
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should stop the monitor when dispose is invoked', function(done) {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 return _queue.dispose();
@@ -543,26 +401,26 @@ describe('ParanoidPirateQueue', function() {
                 // Accessing a "private" variable here. Not ideal, but there
                 // are no other options.
                 expect(_queue._monitor.isInProgress()).to.be.false;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should resolve the promise once the sockets have been successfully closed', function(done){
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 return expect(_queue.dispose()).to.be.fulfilled;
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should set isReady()=false when dispose succeeds', function(done) {
-            _queue = _createQueue();
+            _queue = _queueUtil.createPPQueue();
 
             expect(_queue.initialize()).to.be.fulfilled.then(function(){
                 expect(_queue.isReady()).to.be.true;
                 return expect(_queue.dispose()).to.be.fulfilled.then(function() {
                     expect(_queue.isReady()).to.be.false;
                 });
-            }).then(_getSuccessCallback(done), _getFailureCallback(done));
+            }).then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
     });
 
@@ -571,44 +429,44 @@ describe('ParanoidPirateQueue', function() {
         it('should increment the pending request count if a request is received and no workers are available', function(done){
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint);
 
             var doTests = function() {
                 expect(_queue.getPendingRequestCount()).to.equal(clientCount);
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should increment the available workers count if a worker sends a message and no requests are available', function(done){
             var workerCount = 3;
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(null, beEndpoint);
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
 
             var doTests = function() {
                 expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should show workers as being available if no requests have been assigned to them', function(done){
             var workerCount = 3;
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(null, beEndpoint);
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
 
             var doTests = function() {
                 var map = _queue.getWorkerMap();
@@ -620,21 +478,21 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should show workers as being unavailable once a request has been assigned to them', function(done){
             var workerCount = 3;
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var doTests = function() {
                 var map = _queue.getWorkerMap();
@@ -646,25 +504,25 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should show workers as being unavailable once a request has been assigned to them (worker connects second)', function(done){
             var workerCount = 3;
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var doTests = function() {
                 var map = _queue.getWorkerMap();
@@ -676,16 +534,16 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should show workers as being available once they respond to a request, with no pending requests', function(done){
@@ -693,10 +551,10 @@ describe('ParanoidPirateQueue', function() {
             var clientCount = 3;
             var clientMessage = 'MESSAGE';
             var workerResponse = 'OK';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var firstCheckComplete = _q.defer();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var workerMessageHandler = function() {
                 var socket = this;
@@ -722,31 +580,31 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_setupSocketHandlers('message', workerMessageHandler))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
                 .then(checkWorkerState(false, firstCheckComplete))
-                .then(_wait())
+                .then(_queueUtil.wait())
 
                 .then(checkWorkerState(true))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should raise the "REQUEST" event when a request is received from the client', function(done){
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint);
 
             var def = _q.defer();
             _queue.on(_eventDefinitions.REQUEST, function(clientId, frames) {
-                var clients = _getContext('client');
-                _testUtils.runDeferred(function() {
+                var clients = _queueUtil.getContext('client');
+                _testUtil.runDeferred(function() {
                     expect(clientId.toString()).to.equal(clients[0].identity);
                     expect(frames).to.have.length(3);
                     expect(frames[0].toString()).to.equal(clientId.toString());
@@ -756,24 +614,24 @@ describe('ParanoidPirateQueue', function() {
             });
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
-                .then(_captureContext('client'))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_waitForResolution(def))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_queueUtil.initSockets('req', 1, feEndpoint, true))
+                .then(_queueUtil.captureContext('client'))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.waitForResolution(def))
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should raise the "ASSIGNED_REQUEST" event when a task has been assigned to a worker', function(done){
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var def = _q.defer();
             _queue.on(_eventDefinitions.ASSIGNED_REQUEST, function(workerId, frames) {
-                var clients = _getContext('client');
-                var workers = _getContext('worker');
-                _testUtils.runDeferred(function() {
+                var clients = _queueUtil.getContext('client');
+                var workers = _queueUtil.getContext('worker');
+                _testUtil.runDeferred(function() {
                     expect(workerId.toString()).to.equal(workers[0].identity);
 
                     expect(frames).to.have.length(5);
@@ -786,29 +644,29 @@ describe('ParanoidPirateQueue', function() {
             });
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
-                .then(_captureContext('worker'))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_queueUtil.initSockets('dealer', 1, beEndpoint, true))
+                .then(_queueUtil.captureContext('worker'))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
-                .then(_captureContext('client'))
-                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_queueUtil.initSockets('req', 1, feEndpoint, true))
+                .then(_queueUtil.captureContext('client'))
+                .then(_queueUtil.sendMessages(clientMessage))
 
-                .then(_waitForResolution(def))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_queueUtil.waitForResolution(def))
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should raise the "ASSIGNED_RESPONSE" event when a response has been assigned to a client', function(done){
             var clientMessage = 'MESSAGE';
             var workerResponse = 'OK';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var def = _q.defer();
             _queue.on(_eventDefinitions.ASSIGNED_RESPONSE, function(clientId, frames) {
-                var clients = _getContext('client');
-                _testUtils.runDeferred(function() {
+                var clients = _queueUtil.getContext('client');
+                _testUtil.runDeferred(function() {
                     expect(clientId.toString()).to.equal(clients[0].identity);
                     expect(frames).to.have.length(3);
                     expect(frames[0].toString()).to.equal(clients[0].identity);
@@ -823,25 +681,25 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
-                .then(_setupSocketHandlers('message', workerMessageHandler))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_queueUtil.initSockets('dealer', 1, beEndpoint, true))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
-                .then(_captureContext('client'))
-                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_queueUtil.initSockets('req', 1, feEndpoint, true))
+                .then(_queueUtil.captureContext('client'))
+                .then(_queueUtil.sendMessages(clientMessage))
 
-                .then(_waitForResolution(def))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_queueUtil.waitForResolution(def))
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should immediately dispatch a new request to a worker if one is available', function(done){
             var clientCount = 3;
             var workerCount = 3;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var doTests = function() {
                 expect(_queue.getAvailableWorkerCount()).to.equal(0);
@@ -849,25 +707,25 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should immediately provide a newly ready worker with a request if one is available', function(done){
             var clientCount = 3;
             var workerCount = 3;
             var clientMessage = 'MESSAGE';
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var doTests = function() {
                 expect(_queue.getAvailableWorkerCount()).to.equal(0);
@@ -875,28 +733,28 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
 
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                .then(_wait())
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should send the request to the worker in the correct format', function(done){
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
             var clientMessage = 'MESSAGE';
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var def = _q.defer();
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(frames).to.have.length(4);
                     expect(frames[0].toString()).to.equal(_messageDefinitions.REQUEST);
                     expect(frames[2].toString()).to.equal('');
@@ -905,23 +763,23 @@ describe('ParanoidPirateQueue', function() {
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', 1, beEndpoint, true))
-                .then(_setupSocketHandlers('message', workerMessageHandler))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_queueUtil.initSockets('dealer', 1, beEndpoint, true))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('req', 1, feEndpoint, true))
-                .then(_sendMessagesOverSockets(clientMessage))
+                .then(_queueUtil.initSockets('req', 1, feEndpoint, true))
+                .then(_queueUtil.sendMessages(clientMessage))
 
-                .then(_waitForResolution(def))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_queueUtil.waitForResolution(def))
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should send replies from the worker back to the correct client', function(done) {
             var clientCount = 2;
             var workerCount = 2;
-            var feEndpoint = _testUtils.generateEndpoint();
-            var beEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, beEndpoint);
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
@@ -962,15 +820,15 @@ describe('ParanoidPirateQueue', function() {
             }
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                .then(_setupSocketHandlers('message', workerMessageHandler))
-                .then(_sendMessagesOverSockets(_messageDefinitions.READY))
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
 
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
                 .then(sendMessagesFromClients('message #1', 'message #2'))
 
                 .then(doTests)
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         it('should discard requests that have not been processed within the configured request timeout', function(done) {
@@ -978,8 +836,8 @@ describe('ParanoidPirateQueue', function() {
             var clientMessage = 'MESSAGE';
             var requestTimeout = 300;
             var pollFrequency = 100;
-            var feEndpoint = _testUtils.generateEndpoint();
-            _queue = _createQueue(feEndpoint, null, {
+            var feEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, null, {
                 pollFrequency: 100,
                 workerTimeout: 2000,
                 requestTimeout: requestTimeout
@@ -993,23 +851,23 @@ describe('ParanoidPirateQueue', function() {
             }
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                .then(_sendMessagesOverSockets(clientMessage))
-                .then(_wait())
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
                 
                 .then(checkRequestCount(clientCount))
-                .then(_wait(pollFrequency * 4))
+                .then(_queueUtil.wait(pollFrequency * 4))
 
                 .then(checkRequestCount(0))
-                .then(_getSuccessCallback(done), _getFailureCallback(done));
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
         describe('[HEARTBEAT/EXPIRY LOGIC]', function() {
 
             it('should store worker metadata when a new worker makes a connection', function(done) {
                 var workerCount = 3;
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(null, beEndpoint);
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(null, beEndpoint);
 
                 var doTests = function() {
                     var knownWorkers = _queue.getWorkerMap();
@@ -1027,19 +885,19 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should update worker timestamp when the worker sends a heartbeat', function(done) {
                 var workerCount = 3;
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
                 var initialWorkerMap = null;
                 var saveInitialWorkerMap = function(workers) {
@@ -1061,26 +919,26 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(saveInitialWorkerMap)
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
+                    .then(_queueUtil.sendMessages(_messageDefinitions.HEARTBEAT))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should update worker timestamp when the worker replies to a request', function(done) {
                 var workerCount = 3;
                 var clientCount = 3;
                 var workerResponse = 'OK';
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
                 var initialWorkerMap = null;
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
                 var def = _q.defer();
                 var responseCount = workerCount;
@@ -1116,25 +974,25 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMessageHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(saveInitialWorkerMap)
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets('message #1', 'message #2'))
-                    .then(_waitForResolution(def))
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages('message #1', 'message #2'))
+                    .then(_queueUtil.waitForResolution(def))
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should respond to a heartbeat with another heartbeat', function(done) {
                 var workerCount = 2;
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
                 var frameSets = [];
                 var def = _q.defer();
@@ -1157,46 +1015,46 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMessageHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_waitForResolution(def))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.HEARTBEAT))
+                    .then(_queueUtil.waitForResolution(def))
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should not add a worker sending a heartbeat to the available workers list', function(done) {
                 var workerCount = 3;
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(null, beEndpoint);
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(null, beEndpoint);
 
                 var doTests = function() {
                     expect(_queue.getAvailableWorkerCount()).to.equal(workerCount);
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
+                    .then(_queueUtil.sendMessages(_messageDefinitions.HEARTBEAT))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should not mark a worker as available when a heartbeat is received', function(done) {
                 var workerCount = 3;
                 var clientCount = 3;
                 var clientMessage = 'MESSAGE';
-                var beEndpoint = _testUtils.generateEndpoint();
-                var feEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                var beEndpoint = _testUtil.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
                 var doTests = function(sockets) {
                     var map = _queue.getWorkerMap();
@@ -1209,60 +1067,60 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_captureContext('worker'))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.captureContext('worker'))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
-                    .then(_switchContext('worker'))
+                    .then(_queueUtil.switchContext('worker'))
                     .then(doTests)
 
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
+                    .then(_queueUtil.sendMessages(_messageDefinitions.HEARTBEAT))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should not send a pending request to a worker sending a heartbeat', function(done) {
                 var workerCount = 3;
                 var clientCount = 4;
                 var clientMessage = 'MESSAGE';
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint);
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
                 var doTests = function() {
                     expect(_queue.getPendingRequestCount()).to.equal(clientCount - workerCount);
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_sendMessagesOverSockets(_messageDefinitions.HEARTBEAT))
-                    .then(_wait())
+                    .then(_queueUtil.sendMessages(_messageDefinitions.HEARTBEAT))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should discard a worker if workerTimeout expires since last contact with the worker', function(done) {
                 var workerCount = 3;
                 var pollFrequency = 100;
                 var workerTimeout = 300;
-                var beEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
 
-                _queue = _createQueue(null, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(null, beEndpoint, {
                     pollFrequency: pollFrequency,
                     workerTimeout: workerTimeout
                 });
@@ -1282,15 +1140,15 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(verifyWorkerCount)
-                    .then(_wait(pollFrequency * 4))
+                    .then(_queueUtil.wait(pollFrequency * 4))
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should not send a request to a worker whose timeout has expired', function(done) {
@@ -1301,10 +1159,10 @@ describe('ParanoidPirateQueue', function() {
                 var workerTimeout = 300;
                 var expiredWorkerHandler = _sinon.spy();
                 var validWorkerHandler = _sinon.spy();
-                var beEndpoint = _testUtils.generateEndpoint();
-                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
 
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: pollFrequency,
                     workerTimeout: workerTimeout
                 });
@@ -1322,24 +1180,24 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', expiredWorkerHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait(pollFrequency * 4))
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', expiredWorkerHandler))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait(pollFrequency * 4))
 
                     .then(verifyWorkerCount)
 
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_setupSocketHandlers('message', validWorkerHandler))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', validWorkerHandler))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', workerCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', workerCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
         });
 
@@ -1394,9 +1252,9 @@ describe('ParanoidPirateQueue', function() {
             }
 
             it('should distribute requests from one client to multiple workers when session has not been enabled', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000
                 });
@@ -1417,28 +1275,28 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientIds[0], clientIds[1]))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientIds[0], clientIds[1]))
+                    .then(_queueUtil.wait())
 
                     // Send messages in reverse order, so that they are distributed across workers.
                     .then(sendMessagesInReverseOrder)
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should create a new session, and add the client request to the pending request queue if no workers are available', function(done) {
                 var clientCount = 3;
                 var clientMessage = 'MESSAGE';
-                var feEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, null, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, null, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1461,21 +1319,21 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should create a new session and assign a new client a free worker if one is available', function(done) {
                 var workerCount = 3;
                 var clientCount = 3;
                 var clientMessage = 'MESSAGE';
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1499,25 +1357,25 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should assign a worker id to an unassigned client session once a new worker becomes available', function(done) {
                 var workerCount = 3;
                 var clientCount = 3;
                 var clientMessage = 'MESSAGE';
-                var beEndpoint = _testUtils.generateEndpoint();
-                var feEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var beEndpoint = _testUtil.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1554,24 +1412,24 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(testForUnassignedSessions)
 
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(testForAssignedSessions)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should route all requests based on established session affinity (workers connect first)', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1602,28 +1460,28 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientIds[0], clientIds[1],
+                    .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientIds[0], clientIds[1],
                                                    clientIds[2], clientIds[3]))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     // Send messages in reverse order, but expect session affinity to be honored
                     .then(sendMessagesInReverseOrder)
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should route all requests based on established session affinity (clients connect first)', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1654,31 +1512,31 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', clientIds.length, feEndpoint))
-                    .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets(['', clientIds[0]], ['', clientIds[1]],
+                    .then(_queueUtil.initSockets('dealer', clientIds.length, feEndpoint))
+                    .then(_queueUtil.captureContext('client'))
+                    .then(_queueUtil.sendMessages(['', clientIds[0]], ['', clientIds[1]],
                                                    ['', clientIds[2]], ['', clientIds[3]]))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     // Send messages in reverse order, but expect session affinity to be honored
-                    .then(_switchContext('client'))
+                    .then(_queueUtil.switchContext('client'))
                     .then(sendMessagesInReverseOrder)
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should process requests in order, without giving preferential treatment to clients with sessions', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
                 var clientMessage = 'MESSAGE';
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1701,36 +1559,36 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
-                    .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets(clientIds[0],
+                    .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
+                    .then(_queueUtil.captureContext('client'))
+                    .then(_queueUtil.sendMessages(clientIds[0],
                                                    clientIds[1],
                                                    [clientIds[2], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
                     //Create dummy clients whose messages should be processed in order
-                    .then(_createAndConnectSockets('req', 3, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', 3, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     //Send some requests to get queued.
-                    .then(_switchContext('client'))
-                    .then(_sendMessagesOverSockets(clientIds[0],
+                    .then(_queueUtil.switchContext('client'))
+                    .then(_queueUtil.sendMessages(clientIds[0],
                                                    clientIds[1],
                                                    [clientIds[2], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     //Unblock the workers
                     .then(_unblockWorkers(workerMap))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should assign a request to the session defined worker, even if the worker has died', function(done) {
@@ -1738,10 +1596,10 @@ describe('ParanoidPirateQueue', function() {
                 var clientMessage = 'MESSAGE';
                 var pollFrequency = 100;
                 var workerTimeout = 300;
-                var beEndpoint = _testUtils.generateEndpoint();
-                var feEndpoint = _testUtils.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
 
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: pollFrequency,
                     workerTimeout: workerTimeout,
                     session: {
@@ -1771,42 +1629,42 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', firstWorkerMap._count, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', firstWorkerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', firstWorkerMap._count, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', firstWorkerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_captureContext('client'))
-                    .then(_setupSocketHandlers('message', createMessageHandler('first')))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait(pollFrequency * 4))
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.captureContext('client'))
+                    .then(_queueUtil.setupHandlers('message', createMessageHandler('first')))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait(pollFrequency * 4))
 
                     // Create a second set of workers and clients, but the new workers 
                     // should not touch messages from the previous clients, even though
                     // the workers for those clients have died.
-                    .then(_createAndConnectSockets('dealer', secondWorkerMap._count, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', secondWorkerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', secondWorkerMap._count, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', secondWorkerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_switchContext('client'))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.switchContext('client'))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_setupSocketHandlers('message', createMessageHandler('second')))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.setupHandlers('message', createMessageHandler('second')))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should show the correct number of pending requests when a request is assigned to a worker', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1841,30 +1699,30 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                    .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
+                    .then(_queueUtil.sendMessages([clientIds[0], 'no-block'],
                                                    [clientIds[1], 'no-block'],
                                                    [clientIds[2], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     // Send messages for clients #1, and #2 to build up pending message
                     // count
                     .then(checkStateAndSendMessages)
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should show the correct number of pending requests when a worker picks up an enqueued request', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1908,33 +1766,33 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint, true))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint, true))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientIds.length, feEndpoint))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'no-block'],
+                    .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
+                    .then(_queueUtil.sendMessages([clientIds[0], 'no-block'],
                                                    [clientIds[1], 'no-block'],
                                                    [clientIds[2], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(checkStateAndSendMessages)
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(checkRequestCount)
                     .then(_unblockWorkers(workerMap))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should show the correct number of available workers when a session bound client sends a new request', function(done) {
                 var clientCount = 3;
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -1954,42 +1812,42 @@ describe('ParanoidPirateQueue', function() {
                 }
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
-                    .then(_captureContext('worker'))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_queueUtil.captureContext('worker'))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'block'],
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.captureContext('client'))
+                    .then(_queueUtil.sendMessages([clientIds[0], 'block'],
                                                    [clientIds[0], 'block'],
                                                    [clientIds[0], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(checkAvailableWorkers(0))
-                    .then(_switchContext('worker'))
+                    .then(_queueUtil.switchContext('worker'))
                     .then(_unblockWorkers(workerMap))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(checkAvailableWorkers(workerIds.length))
 
-                    .then(_switchContext('client'))
-                    .then(_sendMessagesOverSockets([clientIds[0], 'block'],
+                    .then(_queueUtil.switchContext('client'))
+                    .then(_queueUtil.sendMessages([clientIds[0], 'block'],
                                                    [clientIds[0], 'block'],
                                                    [clientIds[0], 'block']))
-                    .then(_wait())
+                    .then(_queueUtil.wait())
 
                     .then(checkAvailableWorkers(0))
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should update session timestamp when a client sends a request', function(done) {
                 var clientCount = 3;
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
                 var clientMessage = 'MESSAGE';
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: 5000,
                     workerTimeout: 10000,
                     session: {
@@ -2020,31 +1878,31 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerMap._count, beEndpoint))
-                    .then(_setupSocketHandlers('message', workerMap._handlers))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
+                    .then(_queueUtil.setupHandlers('message', workerMap._handlers))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(saveInitialSessionMap)
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
             it('should discard the client session once the session timeout expires', function(done) {
-                var feEndpoint = _testUtils.generateEndpoint();
-                var beEndpoint = _testUtils.generateEndpoint();
+                var feEndpoint = _testUtil.generateEndpoint();
+                var beEndpoint = _testUtil.generateEndpoint();
                 var clientCount = 3;
                 var workerCount = 3;
                 var clientMessage = 'MESSAGE';
                 var sessionTimeout = 500;
-                _queue = _createQueue(feEndpoint, beEndpoint, {
+                _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                     pollFrequency: sessionTimeout/2,
                     workerTimeout: 10000,
                     session: {
@@ -2070,20 +1928,20 @@ describe('ParanoidPirateQueue', function() {
                 };
 
                 expect(_queue.initialize()).to.be.fulfilled
-                    .then(_createAndConnectSockets('dealer', workerCount, beEndpoint, true))
-                    .then(_sendMessagesOverSockets(_messageDefinitions.READY))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint, true))
+                    .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                    .then(_queueUtil.wait())
 
-                    .then(_createAndConnectSockets('req', clientCount, feEndpoint))
-                    .then(_captureContext('client'))
-                    .then(_sendMessagesOverSockets(clientMessage))
-                    .then(_wait())
+                    .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                    .then(_queueUtil.captureContext('client'))
+                    .then(_queueUtil.sendMessages(clientMessage))
+                    .then(_queueUtil.wait())
 
                     .then(checkForValidSession)
-                    .then(_wait(sessionTimeout*1.5))
+                    .then(_queueUtil.wait(sessionTimeout*1.5))
 
                     .then(doTests)
-                    .then(_getSuccessCallback(done), _getFailureCallback(done));
+                    .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
             });
 
         });
