@@ -757,7 +757,7 @@ describe('ParanoidPirateQueue', function() {
 
                 //Unblock the workers
                 .then(_unblockWorkers(workerMap))
-                .then(_queueUtil.wait())
+                .then(_queueUtil.wait(50))
 
                 .then(doTests)
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
