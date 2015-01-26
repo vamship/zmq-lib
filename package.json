@@ -1,6 +1,6 @@
 {
   "name": "zmq-lib",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A library of wrappers around the core zmq socket offering, providing some additional intelligence and functionality.",
   "main": "lib/index.js",
   "scripts": {
