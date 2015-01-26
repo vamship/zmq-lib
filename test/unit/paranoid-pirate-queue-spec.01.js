@@ -557,11 +557,11 @@ describe('ParanoidPirateQueue', function() {
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var workerMessageHandler = function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
                 var socket = this;
                 // Reply only after the first check is completed.
                 firstCheckComplete.promise.then(function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-                    socket.send([frames[1], frames[2], workerResponse]);
+                    socket.send([_messageDefinitions.RESPONSE, frames[1], frames[2], workerResponse]);
                 });
             };
 
@@ -695,7 +695,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([frames[1], frames[2], workerResponse]);
+                this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], workerResponse]);
             };
 
             expect(_queue.initialize()).to.be.fulfilled
@@ -801,7 +801,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([frames[1], frames[2], 'OK', 'ECHO::' + frames[3].toString()]);
+                this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK', 'ECHO::' + frames[3].toString()]);
             };
 
             var sendMessagesFromClients = function() {

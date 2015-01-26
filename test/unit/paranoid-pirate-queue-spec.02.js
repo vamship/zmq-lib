@@ -124,7 +124,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([frames[0], frames[1], workerResponse]);
+                this.send([_messageDefinitions.RESPONSE, frames[0], frames[1], workerResponse]);
             };
 
             var saveInitialWorkerMap = function(workers) {
@@ -417,12 +417,12 @@ describe('ParanoidPirateQueue', function() {
 
                     worker.messages.push(frames[3].toString());
                     if(frames.length < 5 || frames[4].toString() !== 'block') {
-                        this.send([frames[1], frames[2], 'OK']);
+                        this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK']);
                         worker.unblock = function() {};
                     } else {
                         var socket = this;
                         worker.unblock = function() {
-                            socket.send([frames[1], frames[2], 'OK']);
+                            socket.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK']);
                         };
                     }
                 });
