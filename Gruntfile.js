@@ -48,6 +48,12 @@ var HELP_TEXT =
 '                       and minor version numbers can be incremented by          \n' +
 '                       specifying the "major" or "minor" subtask.               \n' +
 '                                                                                \n' +
+' Supported Options:                                                             \n' +
+'   --unitTestSuite   : Can be used to specify a unit test suite to execute when \n' +
+'                       running tests. Useful when development is focused on a   \n' +
+'                       small section of the app, and there is no need to retest \n' +
+'                       all components when runing a watch.                      \n' +
+'                                                                                \n' +
 ' IMPORTANT: Please note that while the grunt file exposes tasks in addition to  \n' +
 ' ---------  the ones listed below (no private tasks in grunt yet :( ), it is    \n' +
 '            strongly recommended that just the tasks listed below be used       \n' +
@@ -207,6 +213,11 @@ module.exports = function(grunt) {
 
             if(testType === 'unit') {
                 testAction = 'mochaTest:default';
+                var unitTestSuite = grunt.option('unitTestSuite');
+                if(typeof unitTestSuite === 'string' && unitTestSuite.length > 0) {
+                    grunt.log.writeln('Running test suite: ', unitTestSuite);
+                    grunt.config.set('mochaTest.default', TEST.unit.getChildPath(unitTestSuite));
+                }
             }
 
             if(testAction) {
