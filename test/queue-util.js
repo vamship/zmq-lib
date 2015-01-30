@@ -7,6 +7,7 @@ var _q = require('q');
 var _testUtil = require('./test-util');
 
 var ParanoidPirateQueue = require('../lib/paranoid-pirate-queue');
+var _messageDefinitions = require('../lib/message-definitions');
 
 var mod = {
     DEFAULT_DELAY: 10,
@@ -147,6 +148,13 @@ var mod = {
 
             return sockets;
         };
+    },
+
+    createClientRequest: function(service, data) {
+        service = service || '';
+        data = data || [ 'MESSAGE' ];
+        
+        return [ _messageDefinitions.REQUEST, service ].concat(data);
     }
 };
 

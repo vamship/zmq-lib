@@ -124,7 +124,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([_messageDefinitions.RESPONSE, frames[0], frames[1], workerResponse]);
+                this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], workerResponse]);
             };
 
             var saveInitialWorkerMap = function(workers) {
@@ -145,6 +145,9 @@ describe('ParanoidPirateQueue', function() {
                 }
             };
 
+            var message1 = _queueUtil.createClientRequest('foo', 'message#1');
+            var message2 = _queueUtil.createClientRequest('foo', 'message#2');
+
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
                 .then(_queueUtil.setupHandlers('message', workerMessageHandler))
@@ -153,7 +156,7 @@ describe('ParanoidPirateQueue', function() {
 
                 .then(saveInitialWorkerMap)
                 .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
-                .then(_queueUtil.sendMessages('message #1', 'message #2'))
+                .then(_queueUtil.sendMessages(message1, message2))
                 .then(_queueUtil.waitForResolution(def))
 
                 .then(doTests)
@@ -247,7 +250,7 @@ describe('ParanoidPirateQueue', function() {
         it('should not mark a worker as available when a heartbeat is received', function(done) {
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var beEndpoint = _testUtil.generateEndpoint();
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -285,7 +288,7 @@ describe('ParanoidPirateQueue', function() {
         it('should not send a pending request to a worker sending a heartbeat', function(done) {
             var workerCount = 3;
             var clientCount = 4;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -350,7 +353,7 @@ describe('ParanoidPirateQueue', function() {
         it('should not send a request to a worker whose timeout has expired', function(done) {
             var clientCount = 3;
             var workerCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var pollFrequency = 100;
             var workerTimeout = 300;
             var expiredWorkerHandler = _sinon.spy();
@@ -415,14 +418,14 @@ describe('ParanoidPirateQueue', function() {
                 worker.handler = _sinon.stub(worker, 'handler', function() {
                     var frames = Array.prototype.splice.call(arguments, 0);
 
-                    worker.messages.push(frames[3].toString());
-                    if(frames.length < 5 || frames[4].toString() !== 'block') {
-                        this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK']);
+                    worker.messages.push(frames[4].toString());
+                    if(frames.length < 6 || frames[5].toString() !== 'block') {
+                        this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
                         worker.unblock = function() {};
                     } else {
                         var socket = this;
                         worker.unblock = function() {
-                            socket.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK']);
+                            socket.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
                         };
                     }
                 });
@@ -447,6 +450,22 @@ describe('ParanoidPirateQueue', function() {
             };
         }
 
+        function _createClientRequests(messages, service, simulateReq) {
+            service = service || '';
+            var requests = [];
+            messages.forEach(function(message) {
+                var request = _queueUtil.createClientRequest(service, message);
+                if(simulateReq) {
+                    // Prefix a '' to each message. Typically used to simulate traffic
+                    // from a req socket, when actually using a dealer socket.
+                    request.unshift('');
+                }
+                requests.push(request);
+            });
+
+            return requests;
+        }
+
         it('should distribute requests from one client to multiple workers when session has not been enabled', function(done) {
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
@@ -456,6 +475,8 @@ describe('ParanoidPirateQueue', function() {
             });
 
             var clientIds = [ 'client1', 'client2' ];
+            var requests = _createClientRequests(clientIds);
+
             var workerMap = _initializeWorkers(['worker1', 'worker2']);
 
             var doTests = function() {
@@ -465,8 +486,8 @@ describe('ParanoidPirateQueue', function() {
             };
 
             var sendMessagesInReverseOrder = function(sockets) {
-                sockets[1].send(clientIds[1]);
-                sockets[0].send(clientIds[0]);
+                sockets[1].send(requests[1]);
+                sockets[0].send(requests[0]);
                 return sockets;
             };
 
@@ -477,7 +498,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
-                .then(_queueUtil.sendMessages(clientIds[0], clientIds[1]))
+                .then(_queueUtil.sendMessages(requests[0], requests[1]))
                 .then(_queueUtil.wait())
 
                 // Send messages in reverse order, so that they are distributed across workers.
@@ -490,7 +511,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should create a new session, and add the client request to the pending request queue if no workers are available', function(done) {
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, null, {
                 pollFrequency: 5000,
@@ -526,7 +547,7 @@ describe('ParanoidPirateQueue', function() {
         it('should create a new session and assign a new client a free worker if one is available', function(done) {
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
@@ -568,7 +589,7 @@ describe('ParanoidPirateQueue', function() {
         it('should assign a worker id to an unassigned client session once a new worker becomes available', function(done) {
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var beEndpoint = _testUtil.generateEndpoint();
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
@@ -635,6 +656,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2' ];
             var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
+            var requests = _createClientRequests(clientIds);
             var workerMap = _initializeWorkers(workerIds);
 
             var doTests = function() {
@@ -650,7 +672,7 @@ describe('ParanoidPirateQueue', function() {
 
             var sendMessagesInReverseOrder = function(sockets) {
                 for(var index=clientIds.length-1; index>=0; index--) {
-                    sockets[index].send(clientIds[index]);
+                    sockets[index].send(requests[index]);
                 }
                 return sockets;
             };
@@ -662,8 +684,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
-                .then(_queueUtil.sendMessages(clientIds[0], clientIds[1],
-                                               clientIds[2], clientIds[3]))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 // Send messages in reverse order, but expect session affinity to be honored
@@ -687,6 +708,7 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2' ];
             var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
+            var requests = _createClientRequests(clientIds, '', true);
             var workerMap = _initializeWorkers(workerIds);
 
             var doTests = function() {
@@ -702,20 +724,17 @@ describe('ParanoidPirateQueue', function() {
 
             var sendMessagesInReverseOrder = function(sockets) {
                 for(var index=clientIds.length-1; index>=0; index--) {
-                    sockets[index].send(['', clientIds[index]]);
+                    sockets[index].send(requests[index]);
                 }
                 return sockets;
             };
 
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('dealer', clientIds.length, feEndpoint))
-                .then(_queueUtil.captureContext('client'))
-                .then(_queueUtil.sendMessages(['', clientIds[0]], ['', clientIds[1]],
-                                               ['', clientIds[2]], ['', clientIds[3]]))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 // Send messages in reverse order, but expect session affinity to be honored
-                .then(_queueUtil.switchContext('client'))
                 .then(sendMessagesInReverseOrder)
                 .then(_queueUtil.wait())
 
@@ -731,7 +750,7 @@ describe('ParanoidPirateQueue', function() {
         it('should process requests in order, without giving preferential treatment to clients with sessions', function(done) {
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                 pollFrequency: 5000,
                 workerTimeout: 10000,
@@ -742,6 +761,9 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
+            var requests = _createClientRequests(clientIds);
+            requests[2].push('block');
+
             var workerMap = _initializeWorkers(workerIds);
 
             var doTests = function() {
@@ -749,7 +771,7 @@ describe('ParanoidPirateQueue', function() {
 
                 expect(workerList[0].messages).to.deep.equal([
                     clientIds[0], clientIds[1], clientIds[2],
-                    clientMessage, clientMessage, clientMessage,
+                    clientMessage[2], clientMessage[2], clientMessage[2],
                     clientIds[0], clientIds[1], clientIds[2]
                 ]);
             };
@@ -757,9 +779,7 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
                 .then(_queueUtil.captureContext('client'))
-                .then(_queueUtil.sendMessages(clientIds[0],
-                                               clientIds[1],
-                                               [clientIds[2], 'block']))
+                .then(_queueUtil.sendMessages(requests[0], requests[1], requests[2]))
                 .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint, true))
@@ -774,9 +794,7 @@ describe('ParanoidPirateQueue', function() {
 
                 //Send some requests to get queued.
                 .then(_queueUtil.switchContext('client'))
-                .then(_queueUtil.sendMessages(clientIds[0],
-                                               clientIds[1],
-                                               [clientIds[2], 'block']))
+                .then(_queueUtil.sendMessages(requests[0], requests[1], requests[2]))
                 .then(_queueUtil.wait())
 
                 //Unblock the workers
@@ -789,7 +807,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should assign a request to the session defined worker, even if the worker has died', function(done) {
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var pollFrequency = 100;
             var workerTimeout = 300;
             var beEndpoint = _testUtil.generateEndpoint();
@@ -870,6 +888,9 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
+            var requests = _createClientRequests(clientIds);
+            requests[2].push('block');
+
             var workerMap = _initializeWorkers(workerIds);
 
             var doTests = function() {
@@ -889,8 +910,8 @@ describe('ParanoidPirateQueue', function() {
                 expect(worker.pendingRequestCount).to.equal(0);
                 expect(_queue.getPendingRequestCount()).to.equal(0);
 
-                sockets[1].send([clientIds[1], 'no-block']);
-                sockets[0].send([clientIds[0], 'no-block']);
+                sockets[1].send(requests[1]);
+                sockets[0].send(requests[0]);
                 return sockets;
             };
 
@@ -901,9 +922,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
-                .then(_queueUtil.sendMessages([clientIds[0], 'no-block'],
-                                               [clientIds[1], 'no-block'],
-                                               [clientIds[2], 'block']))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 // Send messages for clients #1, and #2 to build up pending message
@@ -928,6 +947,9 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
+            var requests = _createClientRequests(clientIds);
+            requests[2].push('block');
+
             var workerMap = _initializeWorkers(workerIds);
 
             var doTests = function() {
@@ -947,8 +969,8 @@ describe('ParanoidPirateQueue', function() {
                 expect(worker.pendingRequestCount).to.equal(0);
                 expect(_queue.getPendingRequestCount()).to.equal(0);
 
-                sockets[1].send([clientIds[1], 'no-block']);
-                sockets[0].send([clientIds[0], 'no-block']);
+                sockets[1].send(requests[1]);
+                sockets[0].send(requests[0]);
                 return sockets;
             };
 
@@ -968,9 +990,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('req', clientIds.length, feEndpoint))
-                .then(_queueUtil.sendMessages([clientIds[0], 'no-block'],
-                                               [clientIds[1], 'no-block'],
-                                               [clientIds[2], 'block']))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 .then(checkStateAndSendMessages)
@@ -998,6 +1018,11 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2', 'worker3' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
+            var requests = _createClientRequests(clientIds);
+            requests.forEach(function(request) {
+                request.push('block');
+            });
+
             var workerMap = _initializeWorkers(workerIds);
 
             function checkAvailableWorkers(count) {
@@ -1016,9 +1041,7 @@ describe('ParanoidPirateQueue', function() {
 
                 .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
                 .then(_queueUtil.captureContext('client'))
-                .then(_queueUtil.sendMessages([clientIds[0], 'block'],
-                                               [clientIds[0], 'block'],
-                                               [clientIds[0], 'block']))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 .then(checkAvailableWorkers(0))
@@ -1029,9 +1052,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(checkAvailableWorkers(workerIds.length))
 
                 .then(_queueUtil.switchContext('client'))
-                .then(_queueUtil.sendMessages([clientIds[0], 'block'],
-                                               [clientIds[0], 'block'],
-                                               [clientIds[0], 'block']))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, requests))
                 .then(_queueUtil.wait())
 
                 .then(checkAvailableWorkers(0))
@@ -1042,7 +1063,7 @@ describe('ParanoidPirateQueue', function() {
             var clientCount = 3;
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                 pollFrequency: 5000,
                 workerTimeout: 10000,
@@ -1096,7 +1117,7 @@ describe('ParanoidPirateQueue', function() {
             var beEndpoint = _testUtil.generateEndpoint();
             var clientCount = 3;
             var workerCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var sessionTimeout = 500;
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint, {
                 pollFrequency: sessionTimeout/2,

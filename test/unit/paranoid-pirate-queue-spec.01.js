@@ -296,6 +296,7 @@ describe('ParanoidPirateQueue', function() {
                     expect(worker).to.have.property('lastAccess').and.to.be.a('number');
                     expect(worker).to.have.property('isAvailable').and.to.be.a('boolean');
                     expect(worker).to.have.property('pendingRequestCount').and.to.be.a('number');
+                    expect(worker).to.have.property('services').and.to.be.an('Array');
                     expect(worker).to.have.property('address').and.to.be.an('object');
                 }
             };
@@ -347,6 +348,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should return a map with an entry for every client that connects, if session has been enabled', function(done) {
             var clientCount = 10;
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, null, {
                 pollFrequency: 3000,
@@ -372,7 +374,7 @@ describe('ParanoidPirateQueue', function() {
 
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
-                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.sendMessages(clientMessage))
                 .then(_queueUtil.wait())
 
                 .then(doTests)
@@ -428,7 +430,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should increment the pending request count if a request is received and no workers are available', function(done){
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint);
 
@@ -486,10 +488,46 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
+        it('should associate workers with any services specified as a part of the READY message', function(done){
+            var workerMessages = [
+                [ _messageDefinitions.READY, 'service1', 'service2' ],
+                [ _messageDefinitions.READY, 'service2', 'service3' ],
+                [ _messageDefinitions.READY ]
+            ];
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
+
+            var doTests = function(workerSockets) {
+                var map = _queue.getWorkerMap();
+                var workerIndex = 0;
+
+                workerSockets.forEach(function(workerSocket) {
+                    var workerId = (new Buffer(workerSocket.identity)).toString('base64');
+                    var worker = map[workerId];
+                    var expectedMessages = workerMessages[workerIndex];
+                    workerIndex++;
+
+                    expect(worker.isAvailable).to.be.true;
+                    expect(worker.services).to.have.length(expectedMessages.length - 1);
+                    for(var messageIndex=0; messageIndex<expectedMessages.length -1; messageIndex++) {
+                        expect(expectedMessages[messageIndex + 1]).to.equal(worker.services[messageIndex]);
+                    }
+                });
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerMessages.length, beEndpoint, true))
+                .then(_queueUtil.sendMessages.apply(_queueUtil, workerMessages))
+                .then(_queueUtil.wait())
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
         it('should show workers as being unavailable once a request has been assigned to them', function(done){
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -519,7 +557,7 @@ describe('ParanoidPirateQueue', function() {
         it('should show workers as being unavailable once a request has been assigned to them (worker connects second)', function(done){
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -549,7 +587,7 @@ describe('ParanoidPirateQueue', function() {
         it('should show workers as being available once they respond to a request, with no pending requests', function(done){
             var workerCount = 3;
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var workerResponse = 'OK';
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
@@ -561,7 +599,7 @@ describe('ParanoidPirateQueue', function() {
                 var socket = this;
                 // Reply only after the first check is completed.
                 firstCheckComplete.promise.then(function() {
-                    socket.send([_messageDefinitions.RESPONSE, frames[1], frames[2], workerResponse]);
+                    socket.send([_messageDefinitions.RESPONSE, frames[2], frames[3], workerResponse]);
                 });
             };
 
@@ -596,7 +634,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
-        it('should drop messages from workers that have not yet registered', function(done) {
+        it('should discard messages from workers that have not yet registered', function(done) {
             var workerCount = 3;
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(null, beEndpoint);
@@ -614,8 +652,40 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
+        it('should discard all invalid requests', function(done){
+            var workerCount = 3;
+            var clientCount = 3;
+            var clientMessage = 'INVALID';
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
+
+            var doTests = function() {
+                var map = _queue.getWorkerMap();
+
+                expect(_queue.getPendingRequestCount()).to.equal(0);
+                for(var workerId in map) {
+                    var worker = map[workerId];
+                    expect(worker.isAvailable).to.be.true;
+                }
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
+
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(_queueUtil.sendMessages(clientMessage))
+                .then(_queueUtil.wait())
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
         it('should raise the "REQUEST" event when a request is received from the client', function(done){
-            var clientMessage = 'MESSAGE';
+            var service = 'foo';
+            var clientMessage = _queueUtil.createClientRequest(service);
             var feEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint);
 
@@ -624,10 +694,12 @@ describe('ParanoidPirateQueue', function() {
                 var clients = _queueUtil.getContext('client');
                 _testUtil.runDeferred(function() {
                     expect(clientId.toString()).to.equal(clients[0].identity);
-                    expect(frames).to.have.length(3);
-                    expect(frames[0].toString()).to.equal(clientId.toString());
-                    expect(frames[1].toString()).to.be.empty;
-                    expect(frames[2].toString()).to.equal(clientMessage);
+                    expect(frames).to.have.length(5);
+                    expect(frames[0].toString()).to.equal(_messageDefinitions.REQUEST);
+                    expect(frames[1].toString()).to.equal(service);
+                    expect(frames[2].toString()).to.equal(clientId.toString());
+                    expect(frames[3].toString()).to.be.empty;
+                    expect(frames[4].toString()).to.equal(clientMessage[2]);
                 }, def);
             });
 
@@ -640,7 +712,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should raise the "ASSIGNED_REQUEST" event when a task has been assigned to a worker', function(done){
-            var clientMessage = 'MESSAGE';
+            var service = 'foo';
+            var clientMessage = _queueUtil.createClientRequest(service);
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -652,12 +725,13 @@ describe('ParanoidPirateQueue', function() {
                 _testUtil.runDeferred(function() {
                     expect(workerId.toString()).to.equal(workers[0].identity);
 
-                    expect(frames).to.have.length(5);
+                    expect(frames).to.have.length(6);
                     expect(frames[0].toString()).to.equal(workerId.toString());
                     expect(frames[1].toString()).to.equal(_messageDefinitions.REQUEST);
-                    expect(frames[2].toString()).to.equal(clients[0].identity);
-                    expect(frames[3].toString()).to.be.empty;
-                    expect(frames[4].toString()).to.equal(clientMessage);
+                    expect(frames[2].toString()).to.equal(service);
+                    expect(frames[3].toString()).to.equal(clients[0].identity);
+                    expect(frames[4].toString()).to.be.empty;
+                    expect(frames[5].toString()).to.equal(clientMessage[2]);
                 }, def);
             });
 
@@ -675,7 +749,8 @@ describe('ParanoidPirateQueue', function() {
         });
 
         it('should raise the "ASSIGNED_RESPONSE" event when a response has been assigned to a client', function(done){
-            var clientMessage = 'MESSAGE';
+            var service = 'foo';
+            var clientMessage = _queueUtil.createClientRequest(service);
             var workerResponse = 'OK';
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
@@ -686,20 +761,21 @@ describe('ParanoidPirateQueue', function() {
                 var clients = _queueUtil.getContext('client');
                 _testUtil.runDeferred(function() {
                     expect(clientId.toString()).to.equal(clients[0].identity);
-                    expect(frames).to.have.length(3);
+                    expect(frames).to.have.length(4);
                     expect(frames[0].toString()).to.equal(clients[0].identity);
                     expect(frames[1].toString()).to.be.empty;
-                    expect(frames[2].toString()).to.equal(workerResponse);
+                    expect(frames[2].toString()).to.equal(_messageDefinitions.RESPONSE);
+                    expect(frames[3].toString()).to.equal(workerResponse);
                 }, def);
             });
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], workerResponse]);
+                this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], workerResponse]);
             };
 
             expect(_queue.initialize()).to.be.fulfilled
-                .then(_queueUtil.initSockets('dealer', 1, beEndpoint, true))
+                .then(_queueUtil.initSockets('dealer', 1, beEndpoint))
                 .then(_queueUtil.setupHandlers('message', workerMessageHandler))
                 .then(_queueUtil.sendMessages(_messageDefinitions.READY))
 
@@ -714,13 +790,13 @@ describe('ParanoidPirateQueue', function() {
         it('should immediately dispatch a new request to a worker if one is available', function(done){
             var clientCount = 3;
             var workerCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
-            var doTests = function() {
                 expect(_queue.getAvailableWorkerCount()).to.equal(0);
+            var doTests = function() {
                 expect(_queue.getPendingRequestCount()).to.equal(0);
             };
 
@@ -740,7 +816,7 @@ describe('ParanoidPirateQueue', function() {
         it('should immediately provide a newly ready worker with a request if one is available', function(done){
             var clientCount = 3;
             var workerCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
@@ -766,17 +842,20 @@ describe('ParanoidPirateQueue', function() {
         it('should send the request to the worker in the correct format', function(done){
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
-            var clientMessage = 'MESSAGE';
+            var service = 'foo';
+            var clientMessage = _queueUtil.createClientRequest(service);
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var def = _q.defer();
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 _testUtil.runDeferred(function() {
-                    expect(frames).to.have.length(4);
+                    expect(frames).to.have.length(5);
                     expect(frames[0].toString()).to.equal(_messageDefinitions.REQUEST);
-                    expect(frames[2].toString()).to.equal('');
-                    expect(frames[3].toString()).to.equal(clientMessage);
+                    expect(frames[1].toString()).to.equal(service);
+                    // Frame #2 will be the client id.
+                    expect(frames[3].toString()).to.be.empty;
+                    expect(frames[4].toString()).to.equal(clientMessage[2]);
                 }, def);
             };
 
@@ -795,13 +874,14 @@ describe('ParanoidPirateQueue', function() {
         it('should send replies from the worker back to the correct client', function(done) {
             var clientCount = 2;
             var workerCount = 2;
+            var service = 'foo';
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                this.send([_messageDefinitions.RESPONSE, frames[1], frames[2], 'OK', 'ECHO::' + frames[3].toString()]);
+                this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK', 'ECHO::' + frames[4].toString()]);
             };
 
             var sendMessagesFromClients = function() {
@@ -811,14 +891,14 @@ describe('ParanoidPirateQueue', function() {
                     var messageIndex = 0;
                     sockets.forEach(function(socket) {
                         var def = _q.defer();
+                        var message = _queueUtil.createClientRequest(service, messages[messageIndex]);
+                        messageIndex = (messageIndex + 1) % messages.length;
+
                         socket.on('message', function() {
                             var frames = Array.prototype.splice.call(arguments, 0);
                             def.resolve([frames, message]);
                         });
                         promises.push(def.promise);
-
-                        var message = messages[messageIndex];
-                        messageIndex = (messageIndex + 1) % messages.length;
 
                         socket.send(message);
                     });
@@ -831,9 +911,10 @@ describe('ParanoidPirateQueue', function() {
                 results.forEach(function(result) {
                     var frames = result[0];
                     var message = result[1];
-                    expect(frames).to.have.length(2);
-                    expect(frames[0].toString()).to.equal('OK');
-                    expect(frames[1].toString()).to.equal('ECHO::' + message);
+                    expect(frames).to.have.length(3);
+                    expect(frames[0].toString()).to.equal(_messageDefinitions.RESPONSE);
+                    expect(frames[1].toString()).to.equal('OK');
+                    expect(frames[2].toString()).to.equal('ECHO::' + message[2]);
                 });
             }
 
@@ -851,7 +932,7 @@ describe('ParanoidPirateQueue', function() {
 
         it('should discard requests that have not been processed within the configured request timeout', function(done) {
             var clientCount = 3;
-            var clientMessage = 'MESSAGE';
+            var clientMessage = _queueUtil.createClientRequest();
             var requestTimeout = 300;
             var pollFrequency = 100;
             var feEndpoint = _testUtil.generateEndpoint();
