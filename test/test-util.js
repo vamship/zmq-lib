@@ -135,5 +135,19 @@ module.exports = {
             done(ex);
             return false;
         }
+    },
+
+    /**
+     * Introduces a delay in exection
+     *
+     * @param {Number} delay The duration of the delay in milliseconds.
+     * @returns {Object} A promise that will be resolved once the delay has
+     *                   expired.
+     */
+    wait: function(delay) {
+        var mod = module.exports;
+        return mod.getDelayedRunner(function(data) {
+            return data;
+        }, delay);
     }
 }
