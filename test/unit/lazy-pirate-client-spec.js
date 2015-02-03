@@ -10,7 +10,7 @@ _chai.use(require('sinon-chai'));
 _chai.use(require('chai-as-promised'));
 
 var expect = _chai.expect;
-var _testUtils = require('../test-util');
+var _testUtil = require('../test-util');
 var Monitor = require('../../lib/monitor');
 var LazyPirateClient = require('../../lib/lazy-pirate-client');
 var _eventDefinitions = require('../../lib/event-definitions');
@@ -72,7 +72,7 @@ describe('LazyPirateClient', function() {
 
             function createClient(monitor) {
                 return function() {
-                    return new LazyPirateClient(_testUtils.generateEndpoint(), monitor);
+                    return new LazyPirateClient(_testUtil.generateEndpoint(), monitor);
                 };
             }
 
@@ -87,7 +87,7 @@ describe('LazyPirateClient', function() {
 
         it('should create an object that exposes members required by the interface', function() {
             var monitor = new Monitor(2500, 3);
-            var client = new LazyPirateClient(_testUtils.generateEndpoint(), monitor);
+            var client = new LazyPirateClient(_testUtil.generateEndpoint(), monitor);
 
             expect(client).to.be.an('object');
             expect(client).to.be.an.instanceof(_events.EventEmitter);
@@ -99,7 +99,7 @@ describe('LazyPirateClient', function() {
 
         it('should set property values to defaults', function() {
             var monitor = new Monitor(2500, 3);
-            var client = new LazyPirateClient(_testUtils.generateEndpoint(), monitor);
+            var client = new LazyPirateClient(_testUtil.generateEndpoint(), monitor);
 
             expect(client.isReady()).to.be.false;
         });
@@ -108,7 +108,7 @@ describe('LazyPirateClient', function() {
     describe('initialize()', function() {
         it('should initialize a connection to a peer endpoint when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _client = _createLPClient(endpoint);
             _queue = _createQueue(endpoint);
@@ -122,9 +122,9 @@ describe('LazyPirateClient', function() {
             _client.initialize();
         });
 
-        it('should raise a "ready" event with null args after initializing the object', function() {
+        it('should raise a "ready" event with the client reference after initializing the object', function() {
             var handlerSpy = _sinon.spy();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _client = _createLPClient(endpoint);
             _client.on(_eventDefinitions.READY, handlerSpy);
@@ -132,14 +132,14 @@ describe('LazyPirateClient', function() {
             expect(handlerSpy).to.not.have.been.called;
             _client.initialize();
             expect(handlerSpy).to.have.been.called;
-            expect(handlerSpy).to.have.been.calledWithExactly(null);
+            expect(handlerSpy).to.have.been.calledWithExactly(_client);
         });
     });
 
     describe('send()', function() {
         it('should throw an error if invoked before the socket has been initialized', function() {
             var error = 'Socket not initialized. Cannot send message';
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _client = _createLPClient(endpoint);
 
@@ -148,14 +148,14 @@ describe('LazyPirateClient', function() {
 
         it('should send a message over a zero mq socket when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var clientMessage = 'hello';
 
             _queue = _createQueue(endpoint);
             _client = _createLPClient(endpoint);
 
             _queue.on('message', function(message) {
-                _testUtils.runDeferred(function(){
+                _testUtil.runDeferred(function(){
                     expect(message.toString()).to.equal(clientMessage);
                 }, def);
             });
@@ -173,14 +173,14 @@ describe('LazyPirateClient', function() {
             var def = _q.defer();
             var error = 'Cannot send message. The socket is still waiting for a response from a previous request';
             var clientMessage = 'hello';
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             
             _queue = _createQueue(endpoint);
             _client = _createLPClient(endpoint);
 
             _client.on(_eventDefinitions.READY, function() {
                 _client.send(clientMessage);
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(function() {
                         _client.send(clientMessage);
                     }).to.throw(error);
@@ -194,7 +194,7 @@ describe('LazyPirateClient', function() {
 
         it('should raise a "response" event with the response once a response is received to a request', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var clientMessage = 'hello';
             var responseMessage = 'OK';
 
@@ -210,7 +210,7 @@ describe('LazyPirateClient', function() {
             });
 
             _client.on(_eventDefinitions.RESPONSE, function(frames) {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(frames).to.have.length(1);
                     expect(frames[0].toString()).to.equal(responseMessage);
                 }, def);
@@ -223,14 +223,14 @@ describe('LazyPirateClient', function() {
 
         it('should set isReady()=false once invoked.', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var clientMessage = 'hello';
             
             _queue = _createQueue(endpoint);
             _client = _createLPClient(endpoint);
 
             _client.on(_eventDefinitions.READY, function() {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(_client.isReady()).to.be.true;
                     _client.send(clientMessage);
                     expect(_client.isReady()).to.be.false;
@@ -244,7 +244,7 @@ describe('LazyPirateClient', function() {
 
         it('should set isReady()=true once a response is received to a request', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var clientMessage = 'hello';
             
             _queue = _createQueue(endpoint);
@@ -259,7 +259,7 @@ describe('LazyPirateClient', function() {
             });
 
             _client.on(_eventDefinitions.RESPONSE, function() {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(_client.isReady()).to.be.true;
                 }, def);
             });
@@ -275,7 +275,7 @@ describe('LazyPirateClient', function() {
 
             it('should retry a request if a response is not received after a specified duration', function(done){
                 var def = _q.defer();
-                var endpoint = _testUtils.generateEndpoint();
+                var endpoint = _testUtil.generateEndpoint();
                 var clientMessage = 'hello';
                 var messageCounter = 0;
 
@@ -307,7 +307,7 @@ describe('LazyPirateClient', function() {
 
             it('should abandon retries after a specified number of retries have failed', function(done){
                 var def = _q.defer();
-                var endpoint = _testUtils.generateEndpoint();
+                var endpoint = _testUtil.generateEndpoint();
                 var clientMessage = 'hello';
                 var messageCounter = 0;
                 var retryCount = 3;
@@ -328,7 +328,7 @@ describe('LazyPirateClient', function() {
                 });
 
                 _client.on(_eventDefinitions.ABANDONED, function() {
-                    _testUtils.runDeferred(function() {
+                    _testUtil.runDeferred(function() {
                         expect(messageCounter).to.be.at.least(retryCount);
                     }, def);
                 });
@@ -337,11 +337,10 @@ describe('LazyPirateClient', function() {
 
                 expect(def.promise).to.be.fulfilled.notify(done);
             });
-        });
 
-        it('should stop retrying once a valid response has been received from the peer', function(done) {
+            it('should stop retrying once a valid response has been received from the peer', function(done) {
                 var def = _q.defer();
-                var endpoint = _testUtils.generateEndpoint();
+                var endpoint = _testUtil.generateEndpoint();
                 var clientMessage = 'hello';
                 var messageCounter = 0;
                 var retryDuration = 100;
@@ -368,7 +367,7 @@ describe('LazyPirateClient', function() {
 
                 _client.initialize();
 
-                var doTests = _testUtils.getDelayedRunner(function() {
+                var doTests = _testUtil.getDelayedRunner(function() {
                     expect(messageCounter).to.equal(1);
                 }, retryDuration * retryCount);
 
@@ -377,13 +376,15 @@ describe('LazyPirateClient', function() {
                 }, function(err) {
                     done(err);
                 });
+            });
         });
+
     });
     
     describe('dispose()', function() {
         it('should close an open socket, and set isReady()=false when invoked.', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var connectionMade = false;
             var wasReady = false;
 
@@ -391,7 +392,7 @@ describe('LazyPirateClient', function() {
             _client = _createLPClient(endpoint);
 
             _queue.on('disconnect', function(message) {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
 
                     //Expect that the connection was live prior to the disconnect.
                     expect(connectionMade).to.be.true;
