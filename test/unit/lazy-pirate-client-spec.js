@@ -121,19 +121,6 @@ describe('LazyPirateClient', function() {
             
             _client.initialize();
         });
-
-        it('should raise a "ready" event with the client reference after initializing the object', function() {
-            var handlerSpy = _sinon.spy();
-            var endpoint = _testUtil.generateEndpoint();
-
-            _client = _createLPClient(endpoint);
-            _client.on(_eventDefinitions.READY, handlerSpy);
-
-            expect(handlerSpy).to.not.have.been.called;
-            _client.initialize();
-            expect(handlerSpy).to.have.been.called;
-            expect(handlerSpy).to.have.been.calledWithExactly(_client);
-        });
     });
 
     describe('send()', function() {
@@ -184,35 +171,6 @@ describe('LazyPirateClient', function() {
                     expect(function() {
                         _client.send(clientMessage);
                     }).to.throw(error);
-                }, def);
-            });
-
-            _client.initialize();
-
-            expect(def.promise).to.be.fulfilled.notify(done);
-        });
-
-        it('should raise a "response" event with the response once a response is received to a request', function(done) {
-            var def = _q.defer();
-            var endpoint = _testUtil.generateEndpoint();
-            var clientMessage = 'hello';
-            var responseMessage = 'OK';
-
-            _queue = _createQueue(endpoint);
-            _client = _createLPClient(endpoint);
-            
-            _queue.on('message', function(message) {
-                _queue.send(responseMessage);
-            });
-
-            _client.on(_eventDefinitions.READY, function() {
-                _client.send(clientMessage);
-            });
-
-            _client.on(_eventDefinitions.RESPONSE, function(frames) {
-                _testUtil.runDeferred(function() {
-                    expect(frames).to.have.length(1);
-                    expect(frames[0].toString()).to.equal(responseMessage);
                 }, def);
             });
 
@@ -412,6 +370,73 @@ describe('LazyPirateClient', function() {
 
             _client.initialize();
 
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+    });
+
+    describe('[EVENTS]', function() {
+        it('should emit the "READY" event with the client reference after initializing the object', function() {
+            var handlerSpy = _sinon.spy();
+            var endpoint = _testUtil.generateEndpoint();
+
+            _client = _createLPClient(endpoint);
+            _client.on(_eventDefinitions.READY, handlerSpy);
+
+            expect(handlerSpy).to.not.have.been.called;
+            _client.initialize();
+            expect(handlerSpy).to.have.been.called;
+            expect(handlerSpy).to.have.been.calledWithExactly(_client);
+        });
+
+        it('should emit the "RESPONSE" event with the response once a response is received to a request', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtil.generateEndpoint();
+            var clientMessage = 'hello';
+            var responseMessage = 'OK';
+
+            _queue = _createQueue(endpoint);
+            _client = _createLPClient(endpoint);
+            
+            _queue.on('message', function(message) {
+                _queue.send(responseMessage);
+            });
+
+            _client.on(_eventDefinitions.READY, function() {
+                _client.send(clientMessage);
+            });
+
+            _client.on(_eventDefinitions.RESPONSE, function(frames) {
+                _testUtil.runDeferred(function() {
+                    expect(frames).to.have.length(1);
+                    expect(frames[0].toString()).to.equal(responseMessage);
+                }, def);
+            });
+
+            _client.initialize();
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should emit the "ABANDONED" event when a request is abandoned', function(done){
+            var def = _q.defer();
+            var endpoint = _testUtil.generateEndpoint();
+            var clientMessage = 'hello';
+            var handlerObj = {
+                handler: function() {}
+            };
+            var handlerSpy = _sinon.stub(handlerObj, 'handler', function() {
+                def.resolve();
+            });
+
+            _client = _createLPClient(endpoint, new Monitor(200, 3));
+
+            _client.on(_eventDefinitions.READY, function() {
+                _client.send(clientMessage);
+            });
+
+            _client.on(_eventDefinitions.ABANDONED, handlerSpy);
+
+            _client.initialize();
             expect(def.promise).to.be.fulfilled.notify(done);
         });
     });

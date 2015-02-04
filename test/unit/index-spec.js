@@ -8,7 +8,7 @@ describe('index', function() {
     it('should implement methods required by the interface', function() {
         expect(_index).to.have.property('Monitor').and.to.be.a('function');
         expect(_index).to.have.property('LazyPirateClient').and.to.be.a('function');
-        expect(_index).to.have.property('LazyPiratePeer').and.to.be.a('function');
+        expect(_index).to.have.property('LazyPiratePair').and.to.be.a('function');
         expect(_index).to.have.property('SimpleQueue').and.to.be.a('function');
         expect(_index).to.have.property('ParanoidPirateQueue').and.to.be.a('function');
         expect(_index).to.have.property('ParanoidPirateWorker').and.to.be.a('function');
