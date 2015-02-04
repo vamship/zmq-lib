@@ -263,37 +263,6 @@ describe('ParanoidPirateWorker', function(){
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
-        it('should raise a "request" event once a request is received from a peer', function(done) {
-            var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
-            var message1 = 'hello';
-            var message2 = 'world';
-
-            _queue = _createQueue(endpoint);
-            _worker = _createPPWorker(endpoint);
-            
-            _queue.on('message', function() {
-                var frames = Array.prototype.splice.call(arguments, 0);
-                if(frames[1].toString() === _messageDefinitions.READY) {
-                    _queue.send([frames[0], 
-                                _messageDefinitions.REQUEST, message1, message2]);
-                }
-            });
-
-            _worker.on(_eventDefinitions.REQUEST, function(payload) {
-                _testUtils.runDeferred(function() {
-                    expect(payload).to.be.an('Array');
-                    expect(payload).to.have.length(2);
-
-                    expect(payload[0].toString()).to.equal(message1);
-                    expect(payload[1].toString()).to.equal(message2);
-                }, def);
-            });
-
-            _worker.initialize();
-
-            expect(def.promise).to.be.fulfilled.notify(done);
-        });
     });
 
     describe('dispose()', function() {
@@ -524,43 +493,6 @@ describe('ParanoidPirateWorker', function(){
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
-        it('should raise an "abandoned" event after retrying a specified number of times', function(done) {
-            var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
-            var backoffDuration = 10;
-            var backoffRetries = 3;
-            var heartbeatFrequency = 10;
-
-            var wasDisconnected = false;
-            var startTime = null;
-
-            _queue = _createQueue(endpoint);
-            _worker = _createPPWorker(endpoint, _createMonitor(10, 3), {
-                                            backoff: backoffDuration,
-                                            retries: backoffRetries });
-
-            _queue.on('disconnect', function() {
-                wasDisconnected = true;
-                startTime = Date.now();
-            });
-
-            _queue.on('accept', function() {
-                if(wasDisconnected) {
-                    backoffRetries--;
-                }
-            });
-
-            _worker.on(_eventDefinitions.ABANDONED, function() {
-                _testUtils.runDeferred(function() {
-                    expect(backoffRetries).to.equal(0);
-                }, def);
-            });
-
-            _worker.initialize();
-
-            expect(def.promise).to.be.fulfilled.notify(done);
-        });
-
         it('should continue without closing as long as it receives heartbeats', function(done) {
             var def = _q.defer();
             var endpoint = _testUtils.generateEndpoint();
@@ -596,4 +528,77 @@ describe('ParanoidPirateWorker', function(){
             expect(def.promise).to.be.fulfilled.notify(done);
         });
     })
+
+    describe('[EVENTS]', function() {
+
+        it('should emit the "REQUEST" event once a request is received from a peer', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtils.generateEndpoint();
+            var message1 = 'hello';
+            var message2 = 'world';
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint);
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                if(frames[1].toString() === _messageDefinitions.READY) {
+                    _queue.send([frames[0], 
+                                _messageDefinitions.REQUEST, message1, message2]);
+                }
+            });
+
+            _worker.on(_eventDefinitions.REQUEST, function(payload) {
+                _testUtils.runDeferred(function() {
+                    expect(payload).to.be.an('Array');
+                    expect(payload).to.have.length(3);
+
+                    expect(payload[0].toString()).to.equal(_messageDefinitions.REQUEST);
+                    expect(payload[1].toString()).to.equal(message1);
+                    expect(payload[2].toString()).to.equal(message2);
+                }, def);
+            });
+
+            _worker.initialize();
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should emit the "ABANDONED" event after retrying a specified number of times', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtils.generateEndpoint();
+            var backoffDuration = 10;
+            var backoffRetries = 3;
+            var heartbeatFrequency = 10;
+
+            var wasDisconnected = false;
+            var startTime = null;
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(10, 3), {
+                                            backoff: backoffDuration,
+                                            retries: backoffRetries });
+
+            _queue.on('disconnect', function() {
+                wasDisconnected = true;
+                startTime = Date.now();
+            });
+
+            _queue.on('accept', function() {
+                if(wasDisconnected) {
+                    backoffRetries--;
+                }
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function() {
+                _testUtils.runDeferred(function() {
+                    expect(backoffRetries).to.equal(0);
+                }, def);
+            });
+
+            _worker.initialize();
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+    });
 });
