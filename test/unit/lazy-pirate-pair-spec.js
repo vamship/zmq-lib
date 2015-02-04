@@ -10,14 +10,14 @@ _chai.use(require('sinon-chai'));
 _chai.use(require('chai-as-promised'));
 
 var Monitor = require('../../lib/monitor');
-var LazyPiratePeer = require('../../lib/lazy-pirate-peer');
+var LazyPiratePair = require('../../lib/lazy-pirate-pair');
 var _messageDefinitions = require('../../lib/message-definitions');
 var _eventDefinitions = require('../../lib/event-definitions');
 
 var _testUtil = require('../test-util');
 var expect = _chai.expect;
 
-describe('LazyPiratePeer', function() {
+describe('LazyPiratePair', function() {
     var DEFAULT_POLL_FREQUENCY = 2500;
     var DEFAULT_REQUEST_TIMEOUT = 500;
     var DEFAULT_RETRY_COUNT = 3;
@@ -43,7 +43,7 @@ describe('LazyPiratePeer', function() {
         options.retryCount = options.retryCount || DEFAULT_RETRY_COUNT;
 
         monitor = monitor || new Monitor(DEFAULT_POLL_FREQUENCY, -1);
-        var client = new LazyPiratePeer(endpoint, monitor, options);
+        var client = new LazyPiratePair(endpoint, monitor, options);
 
         return client;
     }
@@ -66,7 +66,7 @@ describe('LazyPiratePeer', function() {
 
             function createClient(endpoint) {
                 return function() {
-                    return new LazyPiratePeer(endpoint);
+                    return new LazyPiratePair(endpoint);
                 };
             }
 
@@ -84,7 +84,7 @@ describe('LazyPiratePeer', function() {
 
             function createClient(monitor) {
                 return function() {
-                    return new LazyPiratePeer(_testUtil.generateEndpoint(), monitor);
+                    return new LazyPiratePair(_testUtil.generateEndpoint(), monitor);
                 };
             }
 
@@ -103,7 +103,7 @@ describe('LazyPiratePeer', function() {
             function createClient(options) {
                 return function() {
                     var monitor = new Monitor(2500, 3);
-                    return new LazyPiratePeer(_testUtil.generateEndpoint(), monitor, options);
+                    return new LazyPiratePair(_testUtil.generateEndpoint(), monitor, options);
                 };
             }
 
@@ -122,7 +122,7 @@ describe('LazyPiratePeer', function() {
                     var monitor = new Monitor(2500, 3);
                     var options = {};
                     options.requestTimeout = requestTimeout;
-                    return new LazyPiratePeer(_testUtil.generateEndpoint(), monitor, options);
+                    return new LazyPiratePair(_testUtil.generateEndpoint(), monitor, options);
                 };
             }
 
@@ -143,7 +143,7 @@ describe('LazyPiratePeer', function() {
                     var monitor = new Monitor(2500, 3);
                     var options = { requestTimeout: DEFAULT_REQUEST_TIMEOUT };
                     options.retryCount = retryCount;
-                    return new LazyPiratePeer(_testUtil.generateEndpoint(), monitor, options);
+                    return new LazyPiratePair(_testUtil.generateEndpoint(), monitor, options);
                 };
             }
 
@@ -158,7 +158,7 @@ describe('LazyPiratePeer', function() {
 
         it('should create an object that exposes members required by the interface', function() {
             var monitor = new Monitor(2500, 3);
-            var client = new LazyPiratePeer(_testUtil.generateEndpoint(), monitor, {
+            var client = new LazyPiratePair(_testUtil.generateEndpoint(), monitor, {
                 requestTimeout: DEFAULT_REQUEST_TIMEOUT,
                 retryCount: DEFAULT_RETRY_COUNT,
                 isServer: false
