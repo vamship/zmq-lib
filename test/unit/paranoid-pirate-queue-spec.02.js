@@ -59,7 +59,7 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
                 .then(_queueUtil.sendMessages(_messageDefinitions.READY))
-                .then(_queueUtil.wait())
+                .then(_queueUtil.wait(10))
 
                 .then(doTests)
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
@@ -736,7 +736,7 @@ describe('ParanoidPirateQueue', function() {
 
                 // Send messages in reverse order, but expect session affinity to be honored
                 .then(sendMessagesInReverseOrder)
-                .then(_queueUtil.wait(100))
+                .then(_queueUtil.wait())
 
                 .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
                 .then(_queueUtil.setupHandlers('message', workerMap._handlers))
