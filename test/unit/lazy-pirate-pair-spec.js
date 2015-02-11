@@ -359,7 +359,7 @@ describe('LazyPiratePair', function() {
             _peer = _createPeer(endpoint, true);
             _peer.on('message', function(message) {
                 receivedFrames.push(Array.prototype.splice.call(arguments, 0));
-                if(receivedFrames.length == messageCount) {
+                if(receivedFrames.length === messageCount) {
                     def.resolve();
                 }
             });
