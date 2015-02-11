@@ -736,7 +736,7 @@ describe('ParanoidPirateQueue', function() {
 
                 // Send messages in reverse order, but expect session affinity to be honored
                 .then(sendMessagesInReverseOrder)
-                .then(_queueUtil.wait())
+                .then(_queueUtil.wait(100))
 
                 .then(_queueUtil.initSockets('dealer', workerMap._count, beEndpoint))
                 .then(_queueUtil.setupHandlers('message', workerMap._handlers))
