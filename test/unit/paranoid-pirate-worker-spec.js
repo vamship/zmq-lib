@@ -193,6 +193,34 @@ describe('ParanoidPirateWorker', function(){
 
         });
 
+        it('should send a READY message with service preferences to the queue when invoked', function(done){
+            var def = _q.defer();
+            var endpoint = _testUtils.generateEndpoint();
+            var services = [ 'service1', 'service2', 'service3' ];
+
+            _worker = _createPPWorker(endpoint);
+            _queue = _createQueue(endpoint);
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+
+                _testUtils.runDeferred(function() {
+                    expect(frames).to.have.length(services.length + 2);
+                    expect(frames[1].toString()).to.equal(_messageDefinitions.READY);
+                    var index=2;
+                    services.forEach(function(service) {
+                        expect(service).to.equal(frames[index].toString());
+                        index++;
+                    });
+                }, def);
+            });
+
+            _worker.initialize.apply(_worker, services);
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+
+        });
+
         it('should set isReady()=true once initialized', function(done) {
             var def = _q.defer();
             var endpoint = _testUtils.generateEndpoint();
