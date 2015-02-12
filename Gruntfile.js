@@ -134,6 +134,7 @@ module.exports = function(grunt) {
                 colors: true
             },
             default: [ TEST.unit.allFilesPattern('js') ]
+            //default: [ TEST.unit.getChildPath('paranoid-pirate-queue-spec.*.js') ]
         },
 
         /**
