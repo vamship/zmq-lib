@@ -11,7 +11,7 @@ var ParanoidPirateQueue = require('../lib/paranoid-pirate-queue');
 var _messageDefinitions = require('../lib/message-definitions');
 
 var mod = {
-    DEFAULT_DELAY: 100,
+    DEFAULT_DELAY: 50,
     sockets: [],
     context: [],
 
