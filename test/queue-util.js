@@ -3,6 +3,7 @@
 
 var _zmq = require('zmq');
 var _uuid = require('node-uuid');
+var _sinon = require('sinon');
 var _q = require('q');
 var _testUtil = require('./test-util');
 
@@ -155,7 +156,77 @@ var mod = {
         data = data || [ 'MESSAGE' ];
         
         return [ _messageDefinitions.REQUEST, service ].concat(data);
+    },
+
+    createClientMessages: function(payloads, services, simulateReq) {
+        services = services || [ '' ];
+        var messages = [];
+        var serviceIndex = 0;
+
+        payloads.forEach(function(payload) {
+            var service = services[serviceIndex];
+            serviceIndex = (serviceIndex + 1) % services.length;
+
+            var request = mod.createClientRequest(service, payload);
+            if(simulateReq) {
+                // Prefix a '' to each payload. Typically used to simulate traffic
+                // from a req socket, when actually using a dealer socket.
+                request.unshift('');
+            }
+            messages.push(request);
+        });
+
+        return messages;
+    },
+
+    createWorkerMap: function(workerIds) {
+        var workerMap = {};
+        var handlers = [];
+        var workerList = [];
+        var count = 0;
+        workerIds.forEach(function(workerId) {
+            var worker = {
+                id: workerId,
+                messages: [],
+                handler: function() {}
+            }
+
+            workerMap[workerId] = worker;
+            worker.handler = _sinon.stub(worker, 'handler', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+
+                worker.messages.push(frames[4].toString());
+                if(frames.length < 6 || frames[5].toString() !== 'block') {
+                    this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
+                    worker.unblock = function() {};
+                } else {
+                    var socket = this;
+                    worker.unblock = function() {
+                        socket.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
+                    };
+                }
+            });
+
+            workerList.push(worker);
+            handlers.push(worker.handler);
+            count++;
+        });
+
+        workerMap.getUnblockAll = function() {
+            return function(data) {
+                workerMap._workerList.forEach(function(worker) {
+                    worker.unblock();
+                });
+                return data;
+            };
+        };
+
+        workerMap._workerList = workerList;
+        workerMap._handlers = handlers;
+        workerMap._count = count;
+        return workerMap;
     }
+
 };
 
 module.exports = mod;

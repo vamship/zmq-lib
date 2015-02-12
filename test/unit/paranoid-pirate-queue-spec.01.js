@@ -488,42 +488,6 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
-        it('should associate workers with any services specified as a part of the READY message', function(done){
-            var workerMessages = [
-                [ _messageDefinitions.READY, 'service1', 'service2' ],
-                [ _messageDefinitions.READY, 'service2', 'service3' ],
-                [ _messageDefinitions.READY ]
-            ];
-            var beEndpoint = _testUtil.generateEndpoint();
-            _queue = _queueUtil.createPPQueue(null, beEndpoint);
-
-            var doTests = function(workerSockets) {
-                var map = _queue.getWorkerMap();
-                var workerIndex = 0;
-
-                workerSockets.forEach(function(workerSocket) {
-                    var workerId = (new Buffer(workerSocket.identity)).toString('base64');
-                    var worker = map[workerId];
-                    var expectedMessages = workerMessages[workerIndex];
-                    workerIndex++;
-
-                    expect(worker.isAvailable).to.be.true;
-                    expect(worker.services).to.have.length(expectedMessages.length - 1);
-                    for(var messageIndex=0; messageIndex<expectedMessages.length -1; messageIndex++) {
-                        expect(expectedMessages[messageIndex + 1]).to.equal(worker.services[messageIndex]);
-                    }
-                });
-            };
-
-            expect(_queue.initialize()).to.be.fulfilled
-                .then(_queueUtil.initSockets('dealer', workerMessages.length, beEndpoint, true))
-                .then(_queueUtil.sendMessages.apply(_queueUtil, workerMessages))
-                .then(_queueUtil.wait())
-
-                .then(doTests)
-                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
-        });
-
         it('should show workers as being unavailable once a request has been assigned to them', function(done){
             var workerCount = 3;
             var clientCount = 3;
@@ -874,7 +838,7 @@ describe('ParanoidPirateQueue', function() {
         it('should send replies from the worker back to the correct client', function(done) {
             var clientCount = 2;
             var workerCount = 2;
-            var service = 'foo';
+            var service = '';
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
             _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);

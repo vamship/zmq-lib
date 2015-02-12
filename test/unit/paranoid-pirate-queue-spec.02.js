@@ -145,8 +145,8 @@ describe('ParanoidPirateQueue', function() {
                 }
             };
 
-            var message1 = _queueUtil.createClientRequest('foo', 'message#1');
-            var message2 = _queueUtil.createClientRequest('foo', 'message#2');
+            var message1 = _queueUtil.createClientRequest('', 'message#1');
+            var message2 = _queueUtil.createClientRequest('', 'message#2');
 
             expect(_queue.initialize()).to.be.fulfilled
                 .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
@@ -402,70 +402,6 @@ describe('ParanoidPirateQueue', function() {
 
     describe('[SESSION LOGIC]', function() {
 
-        function _initializeWorkers(workerIds) {
-            var workerMap = {};
-            var handlers = [];
-            var workerList = [];
-            var count = 0;
-            workerIds.forEach(function(workerId) {
-                var worker = {
-                    id: workerId,
-                    messages: [],
-                    handler: function() {}
-                }
-
-                workerMap[workerId] = worker;
-                worker.handler = _sinon.stub(worker, 'handler', function() {
-                    var frames = Array.prototype.splice.call(arguments, 0);
-
-                    worker.messages.push(frames[4].toString());
-                    if(frames.length < 6 || frames[5].toString() !== 'block') {
-                        this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
-                        worker.unblock = function() {};
-                    } else {
-                        var socket = this;
-                        worker.unblock = function() {
-                            socket.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK']);
-                        };
-                    }
-                });
-
-                workerList.push(worker);
-                handlers.push(worker.handler);
-                count++;
-            });
-
-            workerMap._workerList = workerList;
-            workerMap._handlers = handlers;
-            workerMap._count = count;
-            return workerMap;
-        }
-
-        function _unblockWorkers(workerMap) {
-            return function(data) {
-                workerMap._workerList.forEach(function(worker) {
-                    worker.unblock();
-                });
-                return data;
-            };
-        }
-
-        function _createClientRequests(messages, service, simulateReq) {
-            service = service || '';
-            var requests = [];
-            messages.forEach(function(message) {
-                var request = _queueUtil.createClientRequest(service, message);
-                if(simulateReq) {
-                    // Prefix a '' to each message. Typically used to simulate traffic
-                    // from a req socket, when actually using a dealer socket.
-                    request.unshift('');
-                }
-                requests.push(request);
-            });
-
-            return requests;
-        }
-
         it('should distribute requests from one client to multiple workers when session has not been enabled', function(done) {
             var feEndpoint = _testUtil.generateEndpoint();
             var beEndpoint = _testUtil.generateEndpoint();
@@ -475,9 +411,9 @@ describe('ParanoidPirateQueue', function() {
             });
 
             var clientIds = [ 'client1', 'client2' ];
-            var requests = _createClientRequests(clientIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
 
-            var workerMap = _initializeWorkers(['worker1', 'worker2']);
+            var workerMap = _queueUtil.createWorkerMap(['worker1', 'worker2']);
 
             var doTests = function() {
                 workerMap._workerList.forEach(function(worker) {
@@ -656,8 +592,8 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2' ];
             var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
-            var requests = _createClientRequests(clientIds);
-            var workerMap = _initializeWorkers(workerIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var doTests = function() {
                 var workerList = workerMap._workerList;
@@ -708,8 +644,8 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2' ];
             var clientIds = [ 'client1', 'client2', 'client3', 'client4' ];
-            var requests = _createClientRequests(clientIds, '', true);
-            var workerMap = _initializeWorkers(workerIds);
+            var requests = _queueUtil.createClientMessages(clientIds, null, true);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var doTests = function() {
                 var workerList = workerMap._workerList;
@@ -761,10 +697,10 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
-            var requests = _createClientRequests(clientIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
             requests[2].push('block');
 
-            var workerMap = _initializeWorkers(workerIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var doTests = function() {
                 var workerList = workerMap._workerList;
@@ -798,7 +734,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 //Unblock the workers
-                .then(_unblockWorkers(workerMap))
+                .then(workerMap.getUnblockAll())
                 .then(_queueUtil.wait(50))
 
                 .then(doTests)
@@ -822,8 +758,8 @@ describe('ParanoidPirateQueue', function() {
             });
 
             var workerIds = [ 'worker1', 'worker2', 'worker3' ];
-            var firstWorkerMap = _initializeWorkers(workerIds);
-            var secondWorkerMap = _initializeWorkers(workerIds);
+            var firstWorkerMap = _queueUtil.createWorkerMap(workerIds);
+            var secondWorkerMap = _queueUtil.createWorkerMap(workerIds);
 
             var counts = {
                 first: 0,
@@ -888,10 +824,10 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
-            var requests = _createClientRequests(clientIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
             requests[2].push('block');
 
-            var workerMap = _initializeWorkers(workerIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var doTests = function() {
                 var workerInfo = _queue.getWorkerMap();
@@ -947,10 +883,10 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
-            var requests = _createClientRequests(clientIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
             requests[2].push('block');
 
-            var workerMap = _initializeWorkers(workerIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var doTests = function() {
                 var workerInfo = _queue.getWorkerMap();
@@ -997,7 +933,7 @@ describe('ParanoidPirateQueue', function() {
                 .then(_queueUtil.wait())
 
                 .then(checkRequestCount)
-                .then(_unblockWorkers(workerMap))
+                .then(workerMap.getUnblockAll())
                 .then(_queueUtil.wait())
 
                 .then(doTests)
@@ -1018,12 +954,12 @@ describe('ParanoidPirateQueue', function() {
 
             var workerIds = [ 'worker1', 'worker2', 'worker3' ];
             var clientIds = [ 'client1', 'client2', 'client3' ];
-            var requests = _createClientRequests(clientIds);
+            var requests = _queueUtil.createClientMessages(clientIds);
             requests.forEach(function(request) {
                 request.push('block');
             });
 
-            var workerMap = _initializeWorkers(workerIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             function checkAvailableWorkers(count) {
                 return function(data) {
@@ -1046,7 +982,7 @@ describe('ParanoidPirateQueue', function() {
 
                 .then(checkAvailableWorkers(0))
                 .then(_queueUtil.switchContext('worker'))
-                .then(_unblockWorkers(workerMap))
+                .then(workerMap.getUnblockAll())
                 .then(_queueUtil.wait())
 
                 .then(checkAvailableWorkers(workerIds.length))
@@ -1073,7 +1009,7 @@ describe('ParanoidPirateQueue', function() {
             });
 
             var workerIds = [ 'worker1' ];
-            var workerMap = _initializeWorkers(workerIds);
+            var workerMap = _queueUtil.createWorkerMap(workerIds);
 
             var initialSessionMap = null;
             var saveInitialSessionMap = function(sockets) {
