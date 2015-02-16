@@ -289,7 +289,8 @@ worker.on(EventDefinitions.ABANDONED, function(reason) {
 });
 ```
 
-###Gruntfile
+
+### Gruntfile
 This project template is provided with a Gruntfile that contains task definitions for most common development activities. This includes - linting, testing and bumping version numbers. It is strongly recommended that the tasks defined in the Gruntfile be leveraged to the maximum extent possible. More information can be obtained by typing:
 ```
 grunt help
