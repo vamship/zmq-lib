@@ -11,7 +11,7 @@ _chai.use(require('sinon-chai'));
 _chai.use(require('chai-as-promised'));
 
 var expect = _chai.expect;
-var _testUtils = require('../test-util');
+var _testUtil = require('../test-util');
 var Monitor = require('../../lib/monitor');
 var ParanoidPirateWorker = require('../../lib/paranoid-pirate-worker');
 var _messageDefinitions = require('../../lib/message-definitions');
@@ -20,14 +20,14 @@ var _eventDefinitions = require('../../lib/event-definitions');
 describe('ParanoidPirateWorker', function(){
     var DEFAULT_RETRY_FREQ = 2500;
     var DEFAULT_RETRY_COUNT = 3;
-    var DEFAULT_BACKOFF_OPTIONS = { backoff: 10, retries: 3 };
+    var DEFAULT_WORKER_OPTIONS = { backoff: 10, retries: 3, idleTimeout: -1 };
     var _queue;
     var _worker;
 
-    function _createPPWorker(endpoint, monitor, backoffOptions) {
-        backoffOptions = backoffOptions || DEFAULT_BACKOFF_OPTIONS;
+    function _createPPWorker(endpoint, monitor, workerOptions) {
+        workerOptions = workerOptions || DEFAULT_WORKER_OPTIONS;
         monitor = monitor || new Monitor(DEFAULT_RETRY_FREQ, DEFAULT_RETRY_COUNT)
-        var worker = new ParanoidPirateWorker(endpoint, monitor, backoffOptions);
+        var worker = new ParanoidPirateWorker(endpoint, monitor, workerOptions);
 
         return worker;
     }
@@ -81,7 +81,7 @@ describe('ParanoidPirateWorker', function(){
 
             function createWorker(monitor) {
                 return function() {
-                    return new ParanoidPirateWorker(_testUtils.generateEndpoint(), monitor);
+                    return new ParanoidPirateWorker(_testUtil.generateEndpoint(), monitor);
                 };
             }
 
@@ -96,7 +96,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should create an object that exposes members required by the interface', function() {
             var monitor = new Monitor(2500, 3);
-            var worker = new ParanoidPirateWorker(_testUtils.generateEndpoint(), monitor);
+            var worker = new ParanoidPirateWorker(_testUtil.generateEndpoint(), monitor);
 
             expect(worker).to.be.an('object');
             expect(worker).to.be.an.instanceof(_events.EventEmitter);
@@ -109,13 +109,13 @@ describe('ParanoidPirateWorker', function(){
 
         it('should set property values to defaults', function() {
             var monitor = new Monitor(2500, 3);
-            var worker = new ParanoidPirateWorker(_testUtils.generateEndpoint(), monitor);
+            var worker = new ParanoidPirateWorker(_testUtil.generateEndpoint(), monitor);
 
             expect(worker.isReady()).to.be.false;
-            var backoffOptions = worker.getBackoffOptions();
-            expect(backoffOptions).to.be.an('object');
-            expect(backoffOptions).to.have.property('backoff').and.to.be.a('number');
-            expect(backoffOptions).to.have.property('retries').and.to.be.a('number');
+            var workerOptions = worker.getBackoffOptions();
+            expect(workerOptions).to.be.an('object');
+            expect(workerOptions).to.have.property('backoff').and.to.be.a('number');
+            expect(workerOptions).to.have.property('retries').and.to.be.a('number');
         });
 
         it('should use input backoff options when specified during object creation', function() {
@@ -124,12 +124,12 @@ describe('ParanoidPirateWorker', function(){
                 backoff: 2512,
                 retries: 87
             };
-            var worker = new ParanoidPirateWorker(_testUtils.generateEndpoint(), monitor, opts);
+            var worker = new ParanoidPirateWorker(_testUtil.generateEndpoint(), monitor, opts);
 
-            var backoffOptions = worker.getBackoffOptions();
-            expect(backoffOptions).to.be.an('object');
-            expect(backoffOptions).to.have.property('backoff').and.to.equal(opts.backoff);
-            expect(backoffOptions).to.have.property('retries').and.to.equal(opts.retries);
+            var workerOptions = worker.getBackoffOptions();
+            expect(workerOptions).to.be.an('object');
+            expect(workerOptions).to.have.property('backoff').and.to.equal(opts.backoff);
+            expect(workerOptions).to.have.property('retries').and.to.equal(opts.retries);
         });
     });
 
@@ -140,24 +140,24 @@ describe('ParanoidPirateWorker', function(){
                 backoff: 2512,
                 retries: 87
             };
-            var worker = new ParanoidPirateWorker(_testUtils.generateEndpoint(), monitor, opts);
+            var worker = new ParanoidPirateWorker(_testUtil.generateEndpoint(), monitor, opts);
 
-            var backoffOptions = worker.getBackoffOptions();
-            backoffOptions.backoff = 9999;
-            backoffOptions.retries = 291;
+            var workerOptions = worker.getBackoffOptions();
+            workerOptions.backoff = 9999;
+            workerOptions.retries = 291;
 
 
-            backoffOptions = worker.getBackoffOptions();
-            expect(backoffOptions).to.be.an('object');
-            expect(backoffOptions).to.have.property('backoff').and.to.equal(opts.backoff);
-            expect(backoffOptions).to.have.property('retries').and.to.equal(opts.retries);
+            workerOptions = worker.getBackoffOptions();
+            expect(workerOptions).to.be.an('object');
+            expect(workerOptions).to.have.property('backoff').and.to.equal(opts.backoff);
+            expect(workerOptions).to.have.property('retries').and.to.equal(opts.retries);
         });
     });
 
     describe('initialize()', function() {
         it('should initialize a connection to a peer endpoint when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _worker = _createPPWorker(endpoint);
             _queue = _createQueue(endpoint);
@@ -173,7 +173,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should send a READY message to the queue when invoked', function(done){
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _worker = _createPPWorker(endpoint);
             _queue = _createQueue(endpoint);
@@ -181,7 +181,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
 
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(frames).to.have.length(2);
                     expect(frames[1].toString()).to.equal(_messageDefinitions.READY);
                 }, def);
@@ -195,7 +195,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should send a READY message with service preferences to the queue when invoked', function(done){
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var services = [ 'service1', 'service2', 'service3' ];
 
             _worker = _createPPWorker(endpoint);
@@ -204,7 +204,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
 
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(frames).to.have.length(services.length + 2);
                     expect(frames[1].toString()).to.equal(_messageDefinitions.READY);
                     var index=2;
@@ -223,11 +223,11 @@ describe('ParanoidPirateWorker', function(){
 
         it('should set isReady()=true once initialized', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _worker = _createPPWorker(endpoint);
             _worker.on(_eventDefinitions.READY, function() {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(_worker.isReady()).to.be.true;
                 }, def);
             });
@@ -239,7 +239,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should raise a "ready" event with null args after initializing the object', function() {
             var handlerSpy = _sinon.spy();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _worker = _createPPWorker(endpoint);
             _worker.on(_eventDefinitions.READY, handlerSpy);
@@ -254,7 +254,7 @@ describe('ParanoidPirateWorker', function(){
     describe('send()', function() {
         it('should throw an error if invoked before the socket has been initialized', function() {
             var error = 'Socket not initialized. Cannot send message';
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             _worker = _createPPWorker(endpoint);
 
@@ -263,7 +263,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should send a message over a zero mq socket when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var message = 'hello';
 
             _queue = _createQueue(endpoint);
@@ -275,7 +275,7 @@ describe('ParanoidPirateWorker', function(){
                 //We're going to get a READY message when the worker is
                 //initialized. Ignore that and go to the next message.
                 if(frames[1].toString() !== _messageDefinitions.READY) {
-                    _testUtils.runDeferred(function(){
+                    _testUtil.runDeferred(function(){
                         expect(frames).to.have.length(2);
                         expect(frames[1].toString()).to.equal(message);
                     }, def);
@@ -296,7 +296,7 @@ describe('ParanoidPirateWorker', function(){
     describe('dispose()', function() {
         it('should close an open socket, and set isReady()=false when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var connectionMade = false;
             var wasReady = false;
 
@@ -304,7 +304,7 @@ describe('ParanoidPirateWorker', function(){
             _worker = _createPPWorker(endpoint);
 
             _queue.on('disconnect', function(message) {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
 
                     //Expect that the connection was live prior to the disconnect.
                     expect(connectionMade).to.be.true;
@@ -329,7 +329,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should terminate heartbeat monitoring when invoked', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var heartBeatInterval = 100;
             var heartBeatCount = 0;
 
@@ -345,7 +345,7 @@ describe('ParanoidPirateWorker', function(){
                     if(heartBeatCount === 3) {
                         _worker.dispose();
                         setTimeout(function() {
-                            _testUtils.runDeferred(function() {
+                            _testUtil.runDeferred(function() {
                                 expect(heartBeatCount).to.equal(3);
                             }, def);
                         }, heartBeatInterval * 3);
@@ -371,7 +371,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should send out a heartbeat message at a predetermined (monitor) frequency', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             var MAX_HEART_BEATS = 3;
             var receivedReady = false;
@@ -398,7 +398,7 @@ describe('ParanoidPirateWorker', function(){
                         }
                         startTime = Date.now();
                         if(heartBeatCount > MAX_HEART_BEATS) {
-                            _testUtils.runDeferred(function() {
+                            _testUtil.runDeferred(function() {
                                 var averageHBFrequency = aggregatePeriod/MAX_HEART_BEATS;
                                 var range = _getRange(RETRY_FREQUENCY, 5);
                                 expect(receivedReady).to.be.true;
@@ -416,7 +416,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should close the socket if a heartbeat is not received for the specified number of cycles', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             var heartBeatCount = 0;
             var expectedHeartBeatCount = 3;
@@ -433,7 +433,7 @@ describe('ParanoidPirateWorker', function(){
             });
 
             _queue.on('disconnect', function() {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(heartBeatCount).to.equal(expectedHeartBeatCount);
                 }, def);
             });
@@ -445,7 +445,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should reopen a closed socket after an wait period', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var backoffDuration = 10;
 
             var wasDisconnected = false;
@@ -460,7 +460,7 @@ describe('ParanoidPirateWorker', function(){
 
             _queue.on('accept', function() {
                 if(wasDisconnected) {
-                    _testUtils.runDeferred(function() {
+                    _testUtil.runDeferred(function() {
                         var timeTaken = Date.now() - startTime;
                         var range = _getRange(backoffDuration, 5);
                         expect(timeTaken).to.be.within(range[0], range[1]);
@@ -475,7 +475,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should attempt to reopen a closed socket after exponentially increasing wait periods', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             // Has to be sufficiently large so that latency does not become
             // a significant factor in the math when computing backoffs.
             var backoffDuration = 100;
@@ -502,7 +502,7 @@ describe('ParanoidPirateWorker', function(){
                     backoffRetries--;
 
                     if(backoffRetries === 0) {
-                        _testUtils.runDeferred(function() {
+                        _testUtil.runDeferred(function() {
                             var range = _getRange(backoffDuration, 15);
                             expect(retryDurations[0]).to.be.within(range[0], range[1]);
 
@@ -523,7 +523,7 @@ describe('ParanoidPirateWorker', function(){
 
         it('should continue without closing as long as it receives heartbeats', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
 
             var heartBeatCount = 0;
             var expectedHeartBeatCount = 3;
@@ -540,7 +540,7 @@ describe('ParanoidPirateWorker', function(){
                     heartBeatCount++;
                 }
                 if(heartBeatCount > expectedHeartBeatCount * 2) {
-                    _testUtils.runDeferred(function() {
+                    _testUtil.runDeferred(function() {
                         expect(disconnected).to.be.false;
                     }, def);
                 }
@@ -557,11 +557,168 @@ describe('ParanoidPirateWorker', function(){
         });
     })
 
+    describe('[AUTO TERMINATE LOGIC]', function() {
+
+        it('should auto terminate after an idle timeout duration, if one was specified during creation', function(done) {
+            var def = _q.defer();
+            var idleTimeout = 100;
+            var endpoint = _testUtil.generateEndpoint();
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+                backoff: 10,
+                retries: 3,
+                idleTimeout: idleTimeout
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function() {
+                def.resolve();
+            });
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
+            });
+
+            _worker.initialize();
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should ignore idle timeout if the worker is currently processing a request', function(done) {
+            var idleTimeout = 100;
+            var endpoint = _testUtil.generateEndpoint();
+            var abandoned = false;
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+                backoff: 10,
+                retries: 3,
+                idleTimeout: idleTimeout
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function() {
+                abandoned = true;
+            });
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                if(frames[1].toString() === _messageDefinitions.READY) {
+                    _queue.send([frames[0], 
+                                _messageDefinitions.REQUEST]);
+                } else {
+                    _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
+                }
+            });
+
+            var doTests = function() {
+                expect(abandoned).to.be.false;
+            };
+
+            _worker.initialize();
+
+            expect(_q.fcall(_testUtil.wait(idleTimeout * 4))).to.be.fulfilled
+                .then(doTests)
+
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
+        it('should restart the idle timeout counter once the worker responds to the request', function(done) {
+            var idleTimeout = 50;
+            var endpoint = _testUtil.generateEndpoint();
+            var abandoned = false;
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+                backoff: 10,
+                retries: 3,
+                idleTimeout: idleTimeout
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function() {
+                abandoned = true;
+            });
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                if(frames[1].toString() === _messageDefinitions.READY) {
+                    _queue.send([frames[0], 
+                                _messageDefinitions.REQUEST]);
+                } else {
+                    _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
+                }
+            });
+
+            var respondToRequest = function() {
+                expect(abandoned).to.be.false;
+                _worker.send('DONE');
+            };
+
+            var doTests = function() {
+                expect(abandoned).to.be.true;
+            };
+
+            _worker.initialize();
+
+            expect(_q.fcall(_testUtil.wait(idleTimeout * 4))).to.be.fulfilled
+                .then(respondToRequest)
+                .then(_testUtil.wait(idleTimeout * 3))
+                .then(doTests)
+
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
+        it('should not restart the idle timeout counter if the send method is called with notDone=true', function(done) {
+            var idleTimeout = 50;
+            var endpoint = _testUtil.generateEndpoint();
+            var abandoned = false;
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+                backoff: 10,
+                retries: 3,
+                idleTimeout: idleTimeout
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function() {
+                abandoned = true;
+            });
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                if(frames[1].toString() === _messageDefinitions.READY) {
+                    _queue.send([frames[0], 
+                                _messageDefinitions.REQUEST]);
+                } else {
+                    _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
+                }
+            });
+
+            var respondToRequest = function() {
+                expect(abandoned).to.be.false;
+                _worker.send('DONE', true);
+            };
+
+            var doTests = function() {
+                expect(abandoned).to.be.false;
+            };
+
+            _worker.initialize();
+
+            expect(_q.fcall(_testUtil.wait(idleTimeout * 4))).to.be.fulfilled
+                .then(respondToRequest)
+                .then(_testUtil.wait(idleTimeout * 3))
+                .then(doTests)
+
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+    });
+
     describe('[EVENTS]', function() {
 
         it('should emit the "REQUEST" event once a request is received from a peer', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var message1 = 'hello';
             var message2 = 'world';
 
@@ -577,7 +734,7 @@ describe('ParanoidPirateWorker', function(){
             });
 
             _worker.on(_eventDefinitions.REQUEST, function(payload) {
-                _testUtils.runDeferred(function() {
+                _testUtil.runDeferred(function() {
                     expect(payload).to.be.an('Array');
                     expect(payload).to.have.length(3);
 
@@ -592,12 +749,13 @@ describe('ParanoidPirateWorker', function(){
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
-        it('should emit the "ABANDONED" event after retrying a specified number of times', function(done) {
+        it('should emit the "ABANDONED" event with the appropriate reason after retrying a specified number of times', function(done) {
             var def = _q.defer();
-            var endpoint = _testUtils.generateEndpoint();
+            var endpoint = _testUtil.generateEndpoint();
             var backoffDuration = 10;
             var backoffRetries = 3;
             var heartbeatFrequency = 10;
+            var expectedReason = 'peer unreachable';
 
             var wasDisconnected = false;
             var startTime = null;
@@ -618,8 +776,9 @@ describe('ParanoidPirateWorker', function(){
                 }
             });
 
-            _worker.on(_eventDefinitions.ABANDONED, function() {
-                _testUtils.runDeferred(function() {
+            _worker.on(_eventDefinitions.ABANDONED, function(reason) {
+                _testUtil.runDeferred(function() {
+                    expect(reason).to.equal(expectedReason);
                     expect(backoffRetries).to.equal(0);
                 }, def);
             });
@@ -627,6 +786,31 @@ describe('ParanoidPirateWorker', function(){
             _worker.initialize();
 
             expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should emit the "ABANDONED" event with the appropriate reason, if the worker terminates due to idle timeout', function(done) {
+            var idleTimeout = 100;
+            var endpoint = _testUtil.generateEndpoint();
+            var expectedReason = 'idle timeout expired';
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+                backoff: 10,
+                retries: 3,
+                idleTimeout: idleTimeout
+            });
+
+            _worker.on(_eventDefinitions.ABANDONED, function(reason) {
+                expect(reason).to.equal(expectedReason);
+                done();
+            });
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+                _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
+            });
+
+            _worker.initialize();
         });
     });
 });
