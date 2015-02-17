@@ -1,7 +1,8 @@
 # zmq-lib
 > **NOTE:**: This library has been tested successfully with zeromq version 4.0.5. Testing with older versions of zeromq has revelaed some unstability when executing tests, especially with ugly segmentation faults being thrown as the tests execute.
-This is a library of [zero mq](http://zeromq.org/) components that implements some of the patterns described in the [zero mq guide](http://zguide.zeromq.org/page:all). Specifically, the following patterns have been implemented:
 
+
+This is a library of [zero mq](http://zeromq.org/) components that implements some of the patterns described in the [zero mq guide](http://zguide.zeromq.org/page:all). Specifically, the following patterns have been implemented:
 * [Lazy Pirate Pattern](http://zguide.zeromq.org/page:all#Client-Side-Reliability-Lazy-Pirate-Pattern): Reliable client that retries requests if no responses are received within a specified timeout.
 * [Simple Pirate Queue](http://zguide.zeromq.org/page:all#Basic-Reliable-Queuing-Simple-Pirate-Pattern): A simple queue that routes requests from clients to workers. Load is distributed to workers in the sequence in which they become available. Can be combined with the lazy pirate client and a simple req socket that serves as a worker.
 * [Paranoid Pirate Worker/Queue](http://zguide.zeromq.org/page:all#Robust-Reliable-Queuing-Paranoid-Pirate-Pattern): Worker and queue that implement the paranoid pirate pattern. This involves the queue keeping track of active workers, and workers ensuring that the queue is still alive by exchanging heartbeats. This implementation also includes support for a couple of additional features, namely:
