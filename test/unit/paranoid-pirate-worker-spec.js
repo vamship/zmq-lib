@@ -623,13 +623,13 @@ describe('ParanoidPirateWorker', function(){
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
-        it('should restart the idle timeout counter once the worker responds to the request', function(done) {
+        it('should reset the idle timeout counter once the worker responds to the request', function(done) {
             var idleTimeout = 50;
             var endpoint = _testUtil.generateEndpoint();
             var abandoned = false;
 
             _queue = _createQueue(endpoint);
-            _worker = _createPPWorker(endpoint, new Monitor(50, 3), {
+            _worker = _createPPWorker(endpoint, new Monitor(25, 3), {
                 backoff: 10,
                 retries: 3,
                 idleTimeout: idleTimeout
@@ -655,14 +655,14 @@ describe('ParanoidPirateWorker', function(){
             };
 
             var doTests = function() {
-                expect(abandoned).to.be.true;
+                expect(abandoned).to.be.false;
             };
 
             _worker.initialize();
 
             expect(_q.fcall(_testUtil.wait(idleTimeout * 4))).to.be.fulfilled
                 .then(respondToRequest)
-                .then(_testUtil.wait(idleTimeout * 3))
+                .then(_testUtil.wait(idleTimeout/2))
                 .then(doTests)
 
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
