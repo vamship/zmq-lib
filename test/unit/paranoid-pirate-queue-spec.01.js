@@ -279,6 +279,26 @@ describe('ParanoidPirateQueue', function() {
             expect(_queue.getWorkerMap()).not.to.equal(map);
         });
 
+        it('should discard worker messages with invalid action frames', function(done) {
+            var workerCount = 10;
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
+
+            var doTests = function() {
+                var map = _queue.getWorkerMap();
+
+                expect(Object.keys(map)).to.have.length(0);
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.sendMessages('BAD ACTION'))
+                .then(_queueUtil.wait())
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
         it('should return a map with an entry for every worker that connects', function(done) {
             var workerCount = 10;
             var beEndpoint = _testUtil.generateEndpoint();
@@ -845,6 +865,69 @@ describe('ParanoidPirateQueue', function() {
 
             var workerMessageHandler = function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
+                this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK', 'ECHO::' + frames[4].toString()]);
+            };
+
+            var sendMessagesFromClients = function() {
+                var messages = Array.prototype.splice.call(arguments, 0);
+                return function(sockets) {
+                    var promises = [];
+                    var messageIndex = 0;
+                    sockets.forEach(function(socket) {
+                        var def = _q.defer();
+                        var message = _queueUtil.createClientRequest(service, messages[messageIndex]);
+                        messageIndex = (messageIndex + 1) % messages.length;
+
+                        socket.on('message', function() {
+                            var frames = Array.prototype.splice.call(arguments, 0);
+                            def.resolve([frames, message]);
+                        });
+                        promises.push(def.promise);
+
+                        socket.send(message);
+                    });
+
+                    return _q.all(promises);
+                };
+            }
+
+            var doTests = function(results) {
+                results.forEach(function(result) {
+                    var frames = result[0];
+                    var message = result[1];
+                    expect(frames).to.have.length(3);
+                    expect(frames[0].toString()).to.equal(_messageDefinitions.RESPONSE);
+                    expect(frames[1].toString()).to.equal('OK');
+                    expect(frames[2].toString()).to.equal('ECHO::' + message[2]);
+                });
+            }
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+
+                .then(_queueUtil.initSockets('req', clientCount, feEndpoint))
+                .then(sendMessagesFromClients('message #1', 'message #2'))
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
+        it('should reject replies from the worker that do not have a valid action header', function(done) {
+            var clientCount = 2;
+            var workerCount = 2;
+            var service = '';
+            var feEndpoint = _testUtil.generateEndpoint();
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(feEndpoint, beEndpoint);
+
+            var workerMessageHandler = function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+
+                //This message should be ignored.
+                this.send(['BAD ACTION', frames[2], frames[3], 'INVALID', 'IGNORE::' + frames[4].toString()]);
+
                 this.send([_messageDefinitions.RESPONSE, frames[2], frames[3], 'OK', 'ECHO::' + frames[4].toString()]);
             };
 

@@ -240,6 +240,26 @@ describe('SocketManager', function() {
             expect(def.promise).to.be.fulfilled.notify(done);
         });
 
+        it('should resolve the promise once the socket has been closed', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtils.generateEndpoint();
+            _manager = new SocketManager('rep', endpoint);
+            _manager.bindSocket().then(function success() {
+                var closePromise = null;
+                _manager.socket.monitor(10);
+                _manager.socket.on('close', function() {
+                    closePromise.then(function() {
+                        // If this is not reached, the test will timeout and fail.
+                        def.resolve();
+                    });
+                });
+                closePromise = _manager.closeSocket();
+                _manager = null;
+            });
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
         it('should set the socket reference to null when invoked', function(done) {
             var def = _q.defer();
             var endpoint = _testUtils.generateEndpoint();
@@ -261,6 +281,21 @@ describe('SocketManager', function() {
             _manager.bindSocket();
             _manager.closeSocket();
         })
+
+        it('should reject the promise if there are errors closing the socket', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtils.generateEndpoint();
+            _manager = new SocketManager('rep', endpoint);
+            _manager.socket = {};
+            _manager.closeSocket().then(function() {
+                def.resolve();
+            }, function(err) {
+                def.reject(err);
+            });
+
+            expect(def.promise).to.be.rejectedWith('undefined is not a function').notify(done);
+        });
+
     });
 
 });

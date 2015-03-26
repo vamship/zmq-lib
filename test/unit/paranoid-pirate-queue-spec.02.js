@@ -202,6 +202,33 @@ describe('ParanoidPirateQueue', function() {
                 .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
         });
 
+        it('should not respond to messages with invalid action headers', function(done) {
+            var workerCount = 3;
+            var beEndpoint = _testUtil.generateEndpoint();
+            _queue = _queueUtil.createPPQueue(null, beEndpoint);
+
+            var responseCount = 0;
+            var workerMessageHandler = function() {
+                responseCount++;
+            };
+
+            var doTests = function() {
+                expect(responseCount).to.equal(0);
+            };
+
+            expect(_queue.initialize()).to.be.fulfilled
+                .then(_queueUtil.initSockets('dealer', workerCount, beEndpoint))
+                .then(_queueUtil.setupHandlers('message', workerMessageHandler))
+                .then(_queueUtil.sendMessages(_messageDefinitions.READY))
+                .then(_queueUtil.wait())
+
+                .then(_queueUtil.sendMessages('BAD ACTION'))
+                .then(_queueUtil.wait())
+
+                .then(doTests)
+                .then(_testUtil.getSuccessCallback(done), _testUtil.getFailureCallback(done));
+        });
+
         it('should not respond to heartbeats from workers that have not registered with the queue', function(done) {
             var workerCount = 3;
             var beEndpoint = _testUtil.generateEndpoint();

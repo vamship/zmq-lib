@@ -167,7 +167,7 @@ describe('ParanoidPirateWorker', function(){
                 def.resolve();
             });
             expect(def.promise).to.be.fulfilled.notify(done);
-            
+
             _worker.initialize();
         });
 
@@ -271,7 +271,7 @@ describe('ParanoidPirateWorker', function(){
 
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
-                
+
                 //We're going to get a READY message when the worker is
                 //initialized. Ignore that and go to the next message.
                 if(frames[1].toString() !== _messageDefinitions.READY) {
@@ -279,7 +279,38 @@ describe('ParanoidPirateWorker', function(){
                         expect(frames).to.have.length(2);
                         expect(frames[1].toString()).to.equal(message);
                     }, def);
-                } 
+                }
+            });
+
+            _worker.on(_eventDefinitions.READY, function() {
+                _worker.send(message);
+            });
+
+            _worker.initialize();
+
+            expect(def.promise).to.be.fulfilled.notify(done);
+        });
+
+        it('should send a an array message as a multipart zero mq message', function(done) {
+            var def = _q.defer();
+            var endpoint = _testUtil.generateEndpoint();
+            var message = ['hello', 'world'];
+
+            _queue = _createQueue(endpoint);
+            _worker = _createPPWorker(endpoint);
+
+            _queue.on('message', function() {
+                var frames = Array.prototype.splice.call(arguments, 0);
+
+                //We're going to get a READY message when the worker is
+                //initialized. Ignore that and go to the next message.
+                if(frames[1].toString() !== _messageDefinitions.READY) {
+                    _testUtil.runDeferred(function(){
+                        expect(frames).to.have.length(3);
+                        expect(frames[1].toString()).to.equal(message[0]);
+                        expect(frames[2].toString()).to.equal(message[1]);
+                    }, def);
+                }
             });
 
             _worker.on(_eventDefinitions.READY, function() {
@@ -604,7 +635,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 if(frames[1].toString() === _messageDefinitions.READY) {
-                    _queue.send([frames[0], 
+                    _queue.send([frames[0],
                                 _messageDefinitions.REQUEST]);
                 } else {
                     _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
@@ -642,7 +673,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 if(frames[1].toString() === _messageDefinitions.READY) {
-                    _queue.send([frames[0], 
+                    _queue.send([frames[0],
                                 _messageDefinitions.REQUEST]);
                 } else {
                     _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
@@ -687,7 +718,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 if(frames[1].toString() === _messageDefinitions.READY) {
-                    _queue.send([frames[0], 
+                    _queue.send([frames[0],
                                 _messageDefinitions.REQUEST]);
                 } else {
                     _queue.send([frames[0], _messageDefinitions.HEARTBEAT]);
@@ -728,7 +759,7 @@ describe('ParanoidPirateWorker', function(){
             _queue.on('message', function() {
                 var frames = Array.prototype.splice.call(arguments, 0);
                 if(frames[1].toString() === _messageDefinitions.READY) {
-                    _queue.send([frames[0], 
+                    _queue.send([frames[0],
                                 _messageDefinitions.REQUEST, message1, message2]);
                 }
             });
